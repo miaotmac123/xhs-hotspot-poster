@@ -166,7 +166,7 @@ def create_image(
         data = urlopen_json(request, timeout=180)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise OpenAIError(f"OpenAI image request failed: HTTP {exc.code} {body}") from exc
+        raise OpenAIError(format_openai_http_error("OpenAI image request failed", exc.code, body)) from exc
     except urllib.error.URLError as exc:
         raise OpenAIError(f"OpenAI image network error: {exc}") from exc
 
@@ -174,6 +174,33 @@ def create_image(
     if not images or not images[0].get("b64_json"):
         raise OpenAIError("OpenAI image API returned no image data.")
     return b64decode(images[0]["b64_json"])
+
+
+def format_openai_http_error(prefix: str, status_code: int, body: str) -> str:
+    message = body.strip()
+    error_code = ""
+    try:
+        payload = json.loads(body)
+        error = payload.get("error") or {}
+        message = str(error.get("message") or message)
+        error_code = str(error.get("code") or "")
+    except json.JSONDecodeError:
+        pass
+
+    if error_code == "billing_hard_limit_reached":
+        return (
+            "OpenAI 图片生成失败：API 账户已达到 billing hard limit。"
+            "这不是代码问题，需要到 OpenAI Platform 调整用量上限或充值后再试。"
+            "也可以先用“本地生成封面”或上传图片继续流程。"
+            f" 原始错误：HTTP {status_code} {message}"
+        )
+    if error_code == "insufficient_quota":
+        return (
+            "OpenAI 图片生成失败：API 额度或余额不足。"
+            "需要检查 OpenAI Platform billing/usage，或先改用本地封面、上传图片。"
+            f" 原始错误：HTTP {status_code} {message}"
+        )
+    return f"{prefix}: HTTP {status_code} {body}"
 
 
 def urlopen_json(request: urllib.request.Request, *, timeout: int) -> dict[str, Any]:
