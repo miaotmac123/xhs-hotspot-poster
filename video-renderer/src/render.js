@@ -70,6 +70,8 @@ async function main() {
     slug,
     voiceName: videoConfig.voice_name || "Flo (中文（中国大陆）)",
     rate: videoConfig.voice_rate || 170,
+    provider: videoConfig.voice_provider || "macos_say",
+    config,
   });
   const segmentDurations = [];
   for (const file of tts.files) {
@@ -99,9 +101,14 @@ async function main() {
     duration_seconds: plan.durationSeconds,
     audio_duration_seconds: roundNumber(audioDurationSeconds),
     timing_source: plan.timing_source,
-    voice_provider: "macos_say",
+    style_preset: plan.stylePreset || videoConfig.style_preset || "xiaohongshu",
+    voice_provider: tts.provider || videoConfig.voice_provider || "macos_say",
     voice_name: tts.voiceName,
+    voice_type: tts.voiceType,
+    voice_codec: tts.codec,
+    voice_character_count: tts.characterCount,
     voice_rate: videoConfig.voice_rate || 170,
+    tts_estimated_cost_cny: tts.estimatedCostCny || 0,
     fallback_from_voice_name: tts.fallbackFrom || undefined,
     script_path: relativeOutputPath(scriptPath),
     subtitle_path: relativeOutputPath(subtitlePath),

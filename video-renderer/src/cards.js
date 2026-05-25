@@ -33,7 +33,7 @@ export async function writeSceneCards({ plan, outputDir, slug }) {
       await writeFile(svgPath, buildSceneSvg({
         ...scene,
         subtitle: segment.text || scene.subtitle || scene.narration || "",
-      }, index, plan.scenes.length, backgroundDataUri), "utf8");
+      }, index, plan.scenes.length, backgroundDataUri, plan.stylePreset || "xiaohongshu"), "utf8");
       const imagePath = await renderSvgToPng(svgPath);
       cards.push({
         ...scene,
@@ -76,10 +76,11 @@ async function renameIfPossible(from, to) {
   await rename(from, to);
 }
 
-function buildSceneSvg(scene, index, total, backgroundDataUri) {
+function buildSceneSvg(scene, index, total, backgroundDataUri, stylePreset) {
   const [bg, ink, accent, secondary, paper] = PALETTES[index % PALETTES.length];
+  const style = styleSettings(stylePreset);
   const titleLines = wrapCjk(scene.title, 11, 2);
-  const subtitleLines = wrapCjk(scene.subtitle || scene.narration, 23, 3);
+  const subtitleLines = wrapCjk(scene.subtitle || scene.narration, style.subtitleWidth, style.subtitleLines);
   const background = backgroundDataUri
     ? `<image href="${backgroundDataUri}" x="0" y="0" width="1080" height="1920" preserveAspectRatio="xMidYMid slice"/>
   <rect width="1080" height="1920" fill="url(#readableShade)"/>`
@@ -112,10 +113,59 @@ function buildSceneSvg(scene, index, total, backgroundDataUri) {
   <text x="1002" y="124" fill="#000000" font-size="24" font-weight="760" text-anchor="end" opacity="0.30" font-family="${fontFamily()}">${index + 1}/${total}</text>
   <text x="1000" y="122" fill="#ffffff" font-size="24" font-weight="760" text-anchor="end" opacity="0.72" font-family="${fontFamily()}">${index + 1}/${total}</text>
   <rect x="76" y="456" width="10" height="154" rx="5" fill="${accent}" opacity="0.95"/>
-  ${makeTextLines(titleLines, 108, 526, 104, { fill: backgroundDataUri ? "#ffffff" : ink, fontSize: 78, fontWeight: 900, shadow: Boolean(backgroundDataUri) })}
-  <rect x="72" y="1332" width="936" height="254" rx="22" fill="url(#subtitleShade)" opacity="${backgroundDataUri ? "0.86" : "0.94"}"/>
-  ${makeTextLines(subtitleLines, 110, 1426, 58, { fill: "#ffffff", fontSize: 42, fontWeight: 780, shadow: true })}
+  ${makeTextLines(titleLines, 108, style.titleY, 104, { fill: backgroundDataUri ? "#ffffff" : ink, fontSize: style.titleFontSize, fontWeight: 900, shadow: Boolean(backgroundDataUri) })}
+  <rect x="${style.subtitleBoxX}" y="${style.subtitleBoxY}" width="${style.subtitleBoxWidth}" height="${style.subtitleBoxHeight}" rx="22" fill="url(#subtitleShade)" opacity="${backgroundDataUri ? "0.86" : "0.94"}"/>
+  ${makeTextLines(subtitleLines, style.subtitleX, style.subtitleY, style.subtitleLineHeight, { fill: "#ffffff", fontSize: style.subtitleFontSize, fontWeight: 780, shadow: true })}
 </svg>`;
+}
+
+function styleSettings(stylePreset) {
+  if (stylePreset === "douyin") {
+    return {
+      titleY: 492,
+      titleFontSize: 84,
+      subtitleWidth: 18,
+      subtitleLines: 3,
+      subtitleBoxX: 56,
+      subtitleBoxY: 1306,
+      subtitleBoxWidth: 968,
+      subtitleBoxHeight: 286,
+      subtitleX: 102,
+      subtitleY: 1410,
+      subtitleFontSize: 48,
+      subtitleLineHeight: 66,
+    };
+  }
+  if (stylePreset === "shipinhao") {
+    return {
+      titleY: 532,
+      titleFontSize: 76,
+      subtitleWidth: 23,
+      subtitleLines: 3,
+      subtitleBoxX: 72,
+      subtitleBoxY: 1346,
+      subtitleBoxWidth: 936,
+      subtitleBoxHeight: 236,
+      subtitleX: 110,
+      subtitleY: 1434,
+      subtitleFontSize: 40,
+      subtitleLineHeight: 56,
+    };
+  }
+  return {
+    titleY: 526,
+    titleFontSize: 78,
+    subtitleWidth: 22,
+    subtitleLines: 3,
+    subtitleBoxX: 72,
+    subtitleBoxY: 1332,
+    subtitleBoxWidth: 936,
+    subtitleBoxHeight: 254,
+    subtitleX: 110,
+    subtitleY: 1426,
+    subtitleFontSize: 42,
+    subtitleLineHeight: 58,
+  };
 }
 
 function buildFallbackVisual(scene, bg, ink, accent, secondary, paper) {

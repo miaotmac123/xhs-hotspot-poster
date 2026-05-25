@@ -79,7 +79,8 @@ h3 {
 .copy-button,
 .primary-link,
 .primary-button,
-.tab-button {
+.tab-button,
+.select-label select {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--panel);
@@ -87,6 +88,21 @@ h3 {
   cursor: pointer;
   font: inherit;
   text-decoration: none;
+}
+
+.select-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.select-label select {
+  min-height: 36px;
+  padding: 0 28px 0 10px;
+  color: var(--ink);
 }
 
 .icon-button {

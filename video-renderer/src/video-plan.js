@@ -2,7 +2,8 @@ const DEFAULT_DURATION_SECONDS = 45;
 
 export function buildVideoPlan(post, config = {}) {
   const videoConfig = config.video_generation || {};
-  const targetDuration = toPositiveInt(videoConfig.duration_seconds, DEFAULT_DURATION_SECONDS);
+  const stylePreset = normalizeStylePreset(post.video_style_preset || videoConfig.style_preset || "xiaohongshu");
+  const targetDuration = toPositiveInt(videoConfig.duration_seconds, defaultDurationForStyle(stylePreset));
   const title = firstText(post.title_options) || post.selected_topic || "今日热点";
   const topic = cleanText(post.selected_topic || title);
   const angle = cleanText(post.angle || "");
@@ -53,6 +54,7 @@ export function buildVideoPlan(post, config = {}) {
   return {
     provider: "rule_based_node_analysis_v2",
     contentType: "hotspot_analysis_video",
+    stylePreset,
     durationSeconds: totalDuration,
     voiceover,
     scenes: timedScenes,
@@ -63,6 +65,7 @@ export function buildVideoPlan(post, config = {}) {
 export function applyVoiceoverToPlan(plan, voiceover) {
   const nextPlan = {
     ...plan,
+    stylePreset: normalizeStylePreset(plan.stylePreset || "xiaohongshu"),
     voiceover: normalizeNarration(voiceover),
     scenes: [...(plan.scenes || [])],
   };
@@ -79,6 +82,17 @@ export function applyVoiceoverToPlan(plan, voiceover) {
   retimeSubtitles(nextPlan);
   nextPlan.edited_at = new Date().toISOString().slice(0, 19);
   return nextPlan;
+}
+
+export function normalizeStylePreset(value) {
+  if (["xiaohongshu", "douyin", "shipinhao"].includes(value)) return value;
+  return "xiaohongshu";
+}
+
+function defaultDurationForStyle(stylePreset) {
+  if (stylePreset === "douyin") return 36;
+  if (stylePreset === "shipinhao") return 48;
+  return DEFAULT_DURATION_SECONDS;
 }
 
 export function videoScriptText(plan) {

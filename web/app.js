@@ -18,6 +18,7 @@ const generateVideoBtn = document.querySelector("#generateVideoBtn");
 const generateVideoPlanBtn = document.querySelector("#generateVideoPlanBtn");
 const saveVideoScriptBtn = document.querySelector("#saveVideoScriptBtn");
 const videoScriptInput = document.querySelector("#videoScriptInput");
+const videoStyleSelect = document.querySelector("#videoStyleSelect");
 const preparePublishBtn = document.querySelector("#preparePublishBtn");
 const autoFillXhsBtn = document.querySelector("#autoFillXhsBtn");
 const publishPackageInfo = document.querySelector("#publishPackageInfo");
@@ -221,6 +222,7 @@ function renderVideo(draft) {
   error.classList.toggle("hidden", !draft.video_generation_error);
   error.textContent = draft.video_generation_error || "";
   videoScriptInput.value = plan?.voiceover || "";
+  videoStyleSelect.value = draft.video_style_preset || plan?.stylePreset || "xiaohongshu";
   renderVideoMeta(draft);
 
   if (video?.path) {
@@ -240,9 +242,11 @@ function renderVideoMeta(draft) {
   const sources = video.background_sources || [];
   const usage = video.image_search_usage;
   const rows = [];
+  rows.push(["平台风格", styleLabel(draft.video_style_preset || draft.video_plan?.stylePreset || video.style_preset || "xiaohongshu")]);
   rows.push(["分镜", draft.video_plan?.scenes?.length ? `${draft.video_plan.scenes.length} 段` : "未生成"]);
   rows.push(["字幕", video.subtitle_path || "未生成"]);
-  rows.push(["音频", video.audio_duration_seconds ? `${video.audio_duration_seconds} 秒` : "未生成"]);
+  rows.push(["音频", video.audio_duration_seconds ? `${video.audio_duration_seconds} 秒 · ${video.voice_provider || "未记录"}` : "未生成"]);
+  rows.push(["TTS 成本", video.tts_estimated_cost_cny ? `约 ${video.tts_estimated_cost_cny} 元` : "暂无记录"]);
   rows.push(["腾讯图搜", usage ? `${usage.tencent_wimgs_calls || 0} 次，约 ${usage.estimated_cost_cny || 0} 元` : "未调用或未记录"]);
   rows.push(["素材来源", sources.length ? sources.slice(0, 3).map((source) => `${source.provider}: ${source.title || source.query || ""}`).join(" / ") : "尚未生成或未拉到外部图片"]);
   node.innerHTML = rows.map(([label, value]) => `
@@ -267,7 +271,7 @@ function renderStatusPanel(draft) {
     ${statusRow("草稿", draft.generated_at || "未记录", "生成时间")}
     ${statusRow("封面", image.path ? "已生成" : "未生成", image.provider || "provider 未记录")}
     ${statusRow("视频", video.path ? "已生成" : "未生成", video.path || "等待生成")}
-    ${statusRow("成本", usage ? `腾讯图搜约 ${usage.estimated_cost_cny || 0} 元` : "暂无记录", "只统计已写回的 provider")}
+    ${statusRow("成本", costSummary(video, usage), "只统计已写回的 provider")}
     ${statusRow("发布包", draft.platform_packages ? "已记录" : "待生成", "当前以本地发布包为主")}
     ${errors.length ? `<div class="status-errors">${errors.map(([label, text]) => `<p><strong>${escapeHtml(label)}：</strong>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
   `;
@@ -322,7 +326,11 @@ async function generateVideoPlanForSelected() {
   setActiveTab("video");
   setButtonLoading(generateVideoPlanBtn, true, "生成中...");
   try {
-    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-plan-local`, { method: "POST" });
+    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-plan-local`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ style_preset: videoStyleSelect.value }),
+    });
     const result = await response.json();
     mergeDraftResult(result, draftId);
     await refreshDraftListAfterSuccess(result, draftId);
@@ -340,7 +348,7 @@ async function saveVideoScriptForSelected(options = {}) {
     const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-script`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voiceover: videoScriptInput.value }),
+      body: JSON.stringify({ voiceover: videoScriptInput.value, style_preset: videoStyleSelect.value }),
     });
     const result = await response.json();
     mergeDraftResult(result, draftId);
@@ -429,6 +437,19 @@ async function uploadManualImage(event) {
 function setButtonLoading(button, loading, text) {
   button.disabled = loading;
   button.textContent = text;
+}
+
+function styleLabel(value) {
+  if (value === "douyin") return "抖音";
+  if (value === "shipinhao") return "视频号";
+  return "小红书";
+}
+
+function costSummary(video, usage) {
+  const parts = [];
+  if (usage) parts.push(`图搜约 ${usage.estimated_cost_cny || 0} 元`);
+  if (video.tts_estimated_cost_cny) parts.push(`TTS 约 ${video.tts_estimated_cost_cny} 元`);
+  return parts.length ? parts.join(" / ") : "暂无记录";
 }
 
 function pulseButton(button, text) {

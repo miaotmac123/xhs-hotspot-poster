@@ -29,6 +29,11 @@ def remove_suffix(value: str, suffix: str) -> str:
     return value[: -len(suffix)] if suffix and value.endswith(suffix) else value
 
 
+def normalize_video_style(value: object) -> str:
+    text = str(value or "").strip()
+    return text if text in {"xiaohongshu", "douyin", "shipinhao"} else "xiaohongshu"
+
+
 def datetime_now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -258,6 +263,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not path or path.suffix != ".json" or not path.exists():
             self.send_error(404)
             return
+        self.update_video_style_from_body(path)
         try:
             result = generate_local_video_for_post(self.config, path, plan_only=True, fresh=True)
             post = json.loads(path.read_text(encoding="utf-8"))
@@ -277,6 +283,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         voiceover = str(payload.get("voiceover", "")).strip()
+        style_preset = normalize_video_style(payload.get("style_preset"))
         post = json.loads(path.read_text(encoding="utf-8"))
         if not post.get("video_plan"):
             try:
@@ -286,9 +293,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": str(exc), "draft": post})
                 return
         post["video_plan"]["voiceover"] = voiceover
+        post["video_plan"]["stylePreset"] = style_preset
+        post["video_style_preset"] = style_preset
         post["video_plan"]["edited_at"] = datetime_now()
         path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
         self.send_json({"ok": True, "draft": post})
+
+    def update_video_style_from_body(self, path: Path) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return
+        style_preset = normalize_video_style(payload.get("style_preset"))
+        post = json.loads(path.read_text(encoding="utf-8"))
+        post["video_style_preset"] = style_preset
+        if isinstance(post.get("video_plan"), dict):
+            post["video_plan"]["stylePreset"] = style_preset
+        path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def create_publish_package(self, draft_id: str) -> None:
         path = self.resolve_output_path(draft_id)
