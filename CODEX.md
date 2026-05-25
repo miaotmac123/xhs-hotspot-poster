@@ -1,12 +1,20 @@
 # CODEX.md
 
-This repo is a local hotspot content engine. It started as a Xiaohongshu draft tool, but should now be treated as a platform-neutral hotspot-to-content/video system.
+This repo is a local controlled-cost automated content operations system. It started as a Xiaohongshu draft tool, but should now be treated as a platform-neutral hotspot-to-content/video system for controlled passive-income experiments.
 
 ## Start Here
 
 - Read `docs/content-engine-architecture.md` before changing architecture, video, image providers, UI behavior, generation cost, or data model.
+- Read `docs/business-goal-low-cost-content-ops.md` before changing product direction, platform strategy, monetization assumptions, or data model.
 - Read `docs/dashboard-redesign-spec.md` before changing the Web dashboard layout or interactions.
-- A local Codex skill also exists at `/Users/zhangmiao/.codex/skills/hotspot-content-engine`.
+- Use the local project skill `hotspot-content-engine` for this repo: `/Users/zhangmiao/.codex/skills/hotspot-content-engine`.
+
+## Useful Skills
+
+- `hotspot-content-engine`: use for hotspot fetching, content generation, Web dashboard changes, image providers, video rendering, cache cleanup, and publishing packages in this project.
+- `git-github-workflow`: use for Git initialization, `.gitignore` checks, safe commits, remotes, and GitHub pushes across projects.
+
+Do not load every skill by default. Load a skill when the task names it or clearly matches its scope.
 
 ## Project Boundaries
 
@@ -31,7 +39,7 @@ This repo is a local hotspot content engine. It started as a Xiaohongshu draft t
 - `video-renderer/src/tts.js`: TTS provider layer.
 - `video-renderer/src/ffmpeg.js`: final MP4 composition.
 
-## Cost Rules
+## Cost And Quality Rules
 
 - Do not run paid or quota-bound providers unless the user asks.
 - `python3 -m xhs_hotspot_poster --once` can call the LLM.
@@ -39,7 +47,8 @@ This repo is a local hotspot content engine. It started as a Xiaohongshu draft t
 - OpenAI image generation can cost money.
 - Tencent WIMGS can cost money; current estimate is about 0.06 RMB per image-search call.
 - Full video generation may call Tencent WIMGS depending on config.
-- Prefer `--dry-run`, `node --check`, and zero-cost video configs for verification.
+- Prefer `--dry-run`, `node --check`, and zero-cost video configs for code verification.
+- Do not confuse low cost with no cost. For publishable output, choose providers by quality, bounded cost, and measurable ROI.
 
 ## Low-Cost Verification
 
@@ -77,7 +86,7 @@ Default URL is `http://127.0.0.1:8765`, but the user may run another port such a
 - Text posts and video scripts are different assets. Do not directly turn the article body into voiceover.
 - Video narration should be short spoken analysis with clean subtitle segments.
 - The video flow should be: generate/read script, show editable script, save script, render video, preview video.
-- macOS `say` is only an MVP TTS provider. Better voice quality should be added as a provider adapter.
+- macOS `say` is only a flow-verification TTS provider. Better voice quality should be added as a provider adapter.
 - Remote images must be scored and filtered; bad images should be rejected, not hidden behind black overlays.
 - UI state must be stable. Generating covers, videos, or errors must not jump back to the first draft.
 - Errors should persist visibly on the selected draft.

@@ -1,6 +1,6 @@
 # 热点内容生成引擎架构规范
 
-本项目正在从“小红书草稿工具”升级为“热点内容生成引擎”。核心目标是：热点输入统一、内容资产平台无关、视频生成独立、平台发布可插拔、所有付费调用可控。
+本项目正在从“小红书草稿工具”升级为“可控成本自动化内容运营系统”。核心目标是：热点输入统一、内容资产平台无关、视频和图文生成独立、多平台发布包可插拔、质量和付费调用可控，最终服务于可复盘的被动收入实验。
 
 ## 当前架构
 
@@ -69,14 +69,16 @@ Web 只做审核、编辑、触发和预览，不做复杂业务判断。
 
 新增字段优先保持平台中立；小红书、公众号、抖音等平台差异放到 `platform_packages` 或发布包适配层。
 
-## 成本规范
+## 成本与质量规范
 
 - 页面加载、列表刷新、查看草稿不能触发付费 API。
 - `--dry-run` 不能调用 LLM、图片、TTS 或视频素材付费接口。
 - 手动“生成今日热点”会调用 LLM，应在 UI 上显示状态，失败不能清空当前页面。
 - 视频素材搜索必须尊重 `video_generation.max_tencent_wimgs_calls_per_video`，默认最多 2 次。
 - 腾讯 WIMGS 费用按当前估算：1000 次 60 元，约 0.06 元/次；每次生成视频要写回估算成本。
-- 调试视频时优先使用零成本配置：`image_providers: []`、`max_tencent_wimgs_calls_per_video: 0`。
+- 调试流程时优先使用零成本配置：`image_providers: []`、`max_tencent_wimgs_calls_per_video: 0`。
+- 面向发布时不刻意追求免费。素材、TTS、图片和视频 provider 应以“质量达标 + 成本可控 + ROI 可复盘”为准。
+- 免费源、本地源、低价源和高质量付费源都应通过 provider 层接入，允许 A/B 对比质量、成本和效果。
 
 ## 质量规范
 
@@ -92,7 +94,7 @@ Web 只做审核、编辑、触发和预览，不做复杂业务判断。
 - 口播、字幕、画面要按分段时长同步。当前以“每段字幕单独 TTS -> 探测音频时长 -> 反推分镜时长”为基线。
 - 远程配图必须经过评分过滤，低质量、广告感、过度杂乱的图宁可不用。
 - 不允许大面积纯黑遮罩盖住底图；字幕背景只能服务可读性。
-- macOS `say` 只是本地 MVP。要达到可发布质量，应新增专业 TTS 适配器，如腾讯云 TTS、火山引擎、阿里云或 ElevenLabs。
+- macOS `say` 只是流程验证工具。要达到可发布质量，应新增专业 TTS 适配器，如腾讯云 TTS、火山引擎、阿里云或 ElevenLabs。
 
 ### UI
 
@@ -121,7 +123,7 @@ Web 只做审核、编辑、触发和预览，不做复杂业务判断。
 
 ## 验证清单
 
-低成本基础检查：
+低成本基础检查只用于验证代码，不代表发布质量：
 
 ```bash
 python3 -m compileall -q xhs_hotspot_poster
@@ -144,6 +146,7 @@ python3 -m xhs_hotspot_poster --serve
 
 ## 相关规范
 
+- 产品北极星：`docs/business-goal-low-cost-content-ops.md`
 - UI 工作台改造：`docs/dashboard-redesign-spec.md`
 - 本地 Codex skill：`/Users/zhangmiao/.codex/skills/hotspot-content-engine`
 
