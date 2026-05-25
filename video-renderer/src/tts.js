@@ -75,7 +75,7 @@ async function synthesizeTencentVoiceoverSegments({ segments, outputDir, slug, c
         ModelType: Number(videoConfig.tencent_tts_model_type ?? 1),
         VoiceType: Number(videoConfig.tencent_tts_voice_type ?? 101001),
         Codec: videoConfig.tencent_tts_codec || "mp3",
-        SampleRate: Number(videoConfig.tencent_tts_sample_rate ?? 24000),
+        SampleRate: Number(videoConfig.tencent_tts_sample_rate ?? 16000),
         Speed: Number(videoConfig.tencent_tts_speed ?? 0),
         Volume: Number(videoConfig.tencent_tts_volume ?? 0),
         EnableSubtitle: false,

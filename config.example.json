@@ -32,7 +32,7 @@
     "tencent_tts_region": "ap-guangzhou",
     "tencent_tts_voice_type": 101001,
     "tencent_tts_codec": "mp3",
-    "tencent_tts_sample_rate": 24000,
+    "tencent_tts_sample_rate": 16000,
     "tencent_tts_speed": 0,
     "tencent_tts_volume": 0,
     "tencent_tts_estimated_unit_cost_per_10k_chars": 0,
