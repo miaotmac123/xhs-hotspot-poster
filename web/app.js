@@ -1,9 +1,11 @@
 let drafts = [];
 let selectedDraft = null;
+let activeTab = "draft";
 
 const draftList = document.querySelector("#draftList");
 const draftCount = document.querySelector("#draftCount");
 const fallbackCount = document.querySelector("#fallbackCount");
+const latestInfo = document.querySelector("#latestInfo");
 const searchInput = document.querySelector("#searchInput");
 const emptyState = document.querySelector("#emptyState");
 const draftDetail = document.querySelector("#draftDetail");
@@ -32,17 +34,16 @@ generateVideoBtn.addEventListener("click", generateVideoForSelected);
 preparePublishBtn.addEventListener("click", preparePublishPackage);
 autoFillXhsBtn.addEventListener("click", prepareAutoFillXhs);
 
+document.querySelectorAll(".tab-button").forEach((button) => {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+});
+
 document.querySelectorAll("[data-copy]").forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     if (!selectedDraft) return;
-    const field = button.dataset.copy;
-    const text = copyTextFor(field, selectedDraft);
-    navigator.clipboard.writeText(text);
-    const oldText = button.textContent;
-    button.textContent = "已复制";
-    setTimeout(() => {
-      button.textContent = oldText;
-    }, 1200);
+    const text = copyTextFor(button.dataset.copy, selectedDraft);
+    await navigator.clipboard.writeText(text);
+    pulseButton(button, "已复制");
   });
 });
 
@@ -51,19 +52,22 @@ async function loadDrafts(options = {}) {
   const response = await fetch("/api/drafts");
   drafts = await response.json();
   draftCount.textContent = drafts.length;
-  fallbackCount.textContent = drafts.filter((draft) => draft.has_error).length;
+  fallbackCount.textContent = drafts.filter((draft) => draft.has_error || draft.has_video_error || draft.has_image_error).length;
+  latestInfo.textContent = drafts[0]?.generated_at ? `最新：${drafts[0].generated_at}` : "暂无生成记录";
   renderDraftList();
-  if (!drafts.length) return;
+  if (!drafts.length) {
+    selectedDraft = null;
+    emptyState.classList.remove("hidden");
+    draftDetail.classList.add("hidden");
+    return;
+  }
 
   const nextId = drafts.some((draft) => draft.id === preferredId) ? preferredId : drafts[0].id;
-  if (nextId) {
-    await selectDraft(nextId);
-  }
+  if (nextId) await selectDraft(nextId);
 }
 
 async function generateDraftsOnce() {
-  generateOnceBtn.disabled = true;
-  generateOnceBtn.textContent = "生成中...";
+  setButtonLoading(generateOnceBtn, true, "生成中...");
   generateOnceStatus.classList.remove("hidden");
   generateOnceStatus.textContent = "正在抓取热点并生成草稿，通常需要几十秒。";
   try {
@@ -79,15 +83,14 @@ async function generateDraftsOnce() {
   } catch (error) {
     generateOnceStatus.textContent = `生成失败：${error.message}`;
   } finally {
-    generateOnceBtn.disabled = false;
-    generateOnceBtn.textContent = "生成今日热点";
+    setButtonLoading(generateOnceBtn, false, "生成今日热点");
   }
 }
 
 function renderDraftList() {
   const keyword = searchInput.value.trim().toLowerCase();
   const visibleDrafts = drafts.filter((draft) => {
-    const haystack = `${draft.topic} ${(draft.hashtags || []).join(" ")}`.toLowerCase();
+    const haystack = `${draft.topic} ${draft.date} ${(draft.hashtags || []).join(" ")}`.toLowerCase();
     return !keyword || haystack.includes(keyword);
   });
 
@@ -99,8 +102,9 @@ function renderDraftList() {
       <strong>${escapeHtml(draft.topic)}</strong>
       <div class="draft-meta">
         <span>${escapeHtml(draft.date || "")}</span>
-        <span>${escapeHtml(draft.model || "")}</span>
-        ${draft.has_error ? "<span>需处理</span>" : "<span>可审核</span>"}
+        ${draft.has_image ? "<span>有封面</span>" : ""}
+        ${draft.has_video ? "<span>有视频</span>" : ""}
+        ${draft.has_error || draft.has_image_error || draft.has_video_error ? "<span class=\"warn-text\">需处理</span>" : "<span>可审核</span>"}
       </div>
     `;
     button.addEventListener("click", () => selectDraft(draft.id));
@@ -116,6 +120,16 @@ async function selectDraft(id) {
   renderDetail(selectedDraft);
 }
 
+function setActiveTab(tab) {
+  activeTab = tab || "draft";
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === activeTab);
+  });
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `tab-${activeTab}`);
+  });
+}
+
 function renderDetail(draft) {
   emptyState.classList.add("hidden");
   draftDetail.classList.remove("hidden");
@@ -124,23 +138,33 @@ function renderDetail(draft) {
   document.querySelector("#topicText").textContent = draft.selected_topic || "未命名草稿";
   document.querySelector("#coverText").textContent = draft.cover_text || "待补充封面文字";
 
+  const hasError = Boolean(draft.generation_error || draft.image_generation_error || draft.video_generation_error);
   const badge = document.querySelector("#statusBadge");
-  badge.textContent = draft.generation_error ? "需处理" : "可审核";
-  badge.className = `badge ${draft.generation_error ? "warn" : ""}`;
+  badge.textContent = hasError ? "需处理" : "可审核";
+  badge.className = `badge ${hasError ? "warn" : ""}`;
 
-  fillList("#titlesList", draft.title_options || [], "ol");
+  fillList("#titlesList", draft.title_options || []);
   document.querySelector("#bodyText").textContent = draft.body || "";
   fillTags("#hashtagList", draft.hashtags || []);
   fillList("#imageIdeas", draft.image_ideas || []);
   fillList("#checklist", draft.publish_checklist || []);
   fillList("#riskNotes", draft.risk_notes || []);
+
   renderImage(draft);
   renderVideo(draft);
+  renderStatusPanel(draft);
+  setActiveTab(activeTab);
 }
 
 function fillList(selector, items) {
   const node = document.querySelector(selector);
   node.innerHTML = "";
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.textContent = "暂无";
+    node.appendChild(li);
+    return;
+  }
   items.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
@@ -151,6 +175,10 @@ function fillList(selector, items) {
 function fillTags(selector, tags) {
   const node = document.querySelector(selector);
   node.innerHTML = "";
+  if (!tags.length) {
+    node.innerHTML = `<span class="muted">暂无标签</span>`;
+    return;
+  }
   tags.forEach((tag) => {
     const span = document.createElement("span");
     span.className = "tag";
@@ -175,7 +203,7 @@ function renderImage(draft) {
 
   if (image?.path) {
     const imageUrl = `/assets/${encodeURI(image.path)}`;
-    preview.innerHTML = `<img alt="AI 生成配图" src="${imageUrl}" />`;
+    preview.innerHTML = `<img alt="封面或配图预览" src="${imageUrl}" />`;
     imageOpenLink.href = imageUrl;
     imageOpenLink.classList.remove("hidden");
   } else {
@@ -208,18 +236,50 @@ function renderVideo(draft) {
 
 function renderVideoMeta(draft) {
   const node = document.querySelector("#videoMeta");
-  const sources = draft.generated_video?.background_sources || [];
-  const subtitle = draft.generated_video?.subtitle_path;
-  const usage = draft.generated_video?.image_search_usage;
-  const audioDuration = draft.generated_video?.audio_duration_seconds;
-  const sourceText = sources.length
-    ? sources.slice(0, 3).map((source) => `${source.provider}: ${source.title || source.query || ""}`).join(" / ")
-    : "图片源：尚未生成或未拉到外部图片";
+  const video = draft.generated_video || {};
+  const sources = video.background_sources || [];
+  const usage = video.image_search_usage;
+  const rows = [];
+  rows.push(["分镜", draft.video_plan?.scenes?.length ? `${draft.video_plan.scenes.length} 段` : "未生成"]);
+  rows.push(["字幕", video.subtitle_path || "未生成"]);
+  rows.push(["音频", video.audio_duration_seconds ? `${video.audio_duration_seconds} 秒` : "未生成"]);
+  rows.push(["腾讯图搜", usage ? `${usage.tencent_wimgs_calls || 0} 次，约 ${usage.estimated_cost_cny || 0} 元` : "未调用或未记录"]);
+  rows.push(["素材来源", sources.length ? sources.slice(0, 3).map((source) => `${source.provider}: ${source.title || source.query || ""}`).join(" / ") : "尚未生成或未拉到外部图片"]);
+  node.innerHTML = rows.map(([label, value]) => `
+    <div>
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value)}</span>
+    </div>
+  `).join("");
+}
+
+function renderStatusPanel(draft) {
+  const node = document.querySelector("#statusPanel");
+  const video = draft.generated_video || {};
+  const image = draft.generated_image || {};
+  const usage = video.image_search_usage;
+  const errors = [
+    draft.generation_error && ["草稿", draft.generation_error],
+    draft.image_generation_error && ["图片", draft.image_generation_error],
+    draft.video_generation_error && ["视频", draft.video_generation_error],
+  ].filter(Boolean);
   node.innerHTML = `
-    <span>${escapeHtml(sourceText)}</span>
-    ${usage ? `<span>腾讯云图片搜索：${escapeHtml(usage.tencent_wimgs_calls || 0)} 次，约 ${escapeHtml(usage.estimated_cost_cny || 0)} 元</span>` : ""}
-    ${audioDuration ? `<span>音频时长：${escapeHtml(audioDuration)} 秒，字幕按音频重排</span>` : ""}
-    ${subtitle ? `<span>字幕：${escapeHtml(subtitle)}</span>` : ""}
+    ${statusRow("草稿", draft.generated_at || "未记录", "生成时间")}
+    ${statusRow("封面", image.path ? "已生成" : "未生成", image.provider || "provider 未记录")}
+    ${statusRow("视频", video.path ? "已生成" : "未生成", video.path || "等待生成")}
+    ${statusRow("成本", usage ? `腾讯图搜约 ${usage.estimated_cost_cny || 0} 元` : "暂无记录", "只统计已写回的 provider")}
+    ${statusRow("发布包", draft.platform_packages ? "已记录" : "待生成", "当前以本地发布包为主")}
+    ${errors.length ? `<div class="status-errors">${errors.map(([label, text]) => `<p><strong>${escapeHtml(label)}：</strong>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
+  `;
+}
+
+function statusRow(title, value, note) {
+  return `
+    <div class="status-row">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(note || "")}</small>
+    </div>
   `;
 }
 
@@ -233,9 +293,10 @@ function mergeDraftResult(result, draftId) {
 }
 
 async function refreshDraftListAfterSuccess(result, draftId) {
-  renderDraftList();
   if (result?.ok) {
     await loadDrafts({ selectId: draftId });
+  } else {
+    renderDraftList();
   }
 }
 
@@ -243,71 +304,38 @@ async function generateImageForSelected(mode = "local") {
   if (!selectedDraft) return;
   const draftId = selectedDraft.id;
   const button = mode === "ai" ? generateAiImageBtn : generateImageBtn;
-  button.disabled = true;
-  button.textContent = "生成中...";
+  setButtonLoading(button, true, "生成中...");
   const endpoint = mode === "ai" ? "image-ai" : "image-local";
   try {
-    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/${endpoint}`, {
-      method: "POST",
-    });
+    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/${endpoint}`, { method: "POST" });
     const result = await response.json();
     mergeDraftResult(result, draftId);
     await refreshDraftListAfterSuccess(result, draftId);
   } finally {
-    button.disabled = false;
-    button.textContent = mode === "ai" ? "大模型生成图" : "本地生成封面";
-  }
-}
-
-async function generateVideoForSelected() {
-  if (!selectedDraft) return;
-  const saveResult = await saveVideoScriptForSelected({ quiet: true });
-  if (saveResult && !saveResult.ok) return;
-  const draftId = selectedDraft.id;
-  generateVideoBtn.disabled = true;
-  generateVideoBtn.textContent = "生成中...";
-  try {
-    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-local`, {
-      method: "POST",
-    });
-    const result = await response.json();
-    mergeDraftResult(result, draftId);
-    await refreshDraftListAfterSuccess(result, draftId);
-    generateVideoBtn.textContent = result.ok ? "重新生成视频" : "生成本地视频";
-  } finally {
-    generateVideoBtn.disabled = false;
-    if (generateVideoBtn.textContent === "生成中...") {
-      generateVideoBtn.textContent = "生成本地视频";
-    }
+    setButtonLoading(button, false, mode === "ai" ? "大模型生成图" : "本地生成封面");
   }
 }
 
 async function generateVideoPlanForSelected() {
   if (!selectedDraft) return;
   const draftId = selectedDraft.id;
-  generateVideoPlanBtn.disabled = true;
-  generateVideoPlanBtn.textContent = "生成中...";
+  setActiveTab("video");
+  setButtonLoading(generateVideoPlanBtn, true, "生成中...");
   try {
-    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-plan-local`, {
-      method: "POST",
-    });
+    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-plan-local`, { method: "POST" });
     const result = await response.json();
     mergeDraftResult(result, draftId);
     await refreshDraftListAfterSuccess(result, draftId);
-    generateVideoPlanBtn.textContent = result.ok ? "重新生成视频稿" : "生成视频稿";
+    if (result.ok) pulseButton(generateVideoPlanBtn, "已生成");
   } finally {
-    generateVideoPlanBtn.disabled = false;
-    if (generateVideoPlanBtn.textContent === "生成中...") {
-      generateVideoPlanBtn.textContent = "生成视频稿";
-    }
+    setButtonLoading(generateVideoPlanBtn, false, "生成视频稿");
   }
 }
 
 async function saveVideoScriptForSelected(options = {}) {
   if (!selectedDraft) return;
   const draftId = selectedDraft.id;
-  saveVideoScriptBtn.disabled = true;
-  if (!options.quiet) saveVideoScriptBtn.textContent = "保存中...";
+  if (!options.quiet) setButtonLoading(saveVideoScriptBtn, true, "保存中...");
   try {
     const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-script`, {
       method: "POST",
@@ -316,76 +344,69 @@ async function saveVideoScriptForSelected(options = {}) {
     });
     const result = await response.json();
     mergeDraftResult(result, draftId);
-    saveVideoScriptBtn.textContent = result.ok ? "已保存" : "保存视频稿";
+    if (!options.quiet) pulseButton(saveVideoScriptBtn, result.ok ? "已保存" : "保存失败");
     return result;
   } finally {
-    saveVideoScriptBtn.disabled = false;
-    setTimeout(() => {
-      saveVideoScriptBtn.textContent = "保存视频稿";
-    }, 1200);
+    if (!options.quiet) setButtonLoading(saveVideoScriptBtn, false, "保存视频稿");
+  }
+}
+
+async function generateVideoForSelected() {
+  if (!selectedDraft) return;
+  setActiveTab("video");
+  const saveResult = await saveVideoScriptForSelected({ quiet: true });
+  if (saveResult && !saveResult.ok) return;
+  const draftId = selectedDraft.id;
+  setButtonLoading(generateVideoBtn, true, "生成中...");
+  try {
+    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/video-local`, { method: "POST" });
+    const result = await response.json();
+    mergeDraftResult(result, draftId);
+    await refreshDraftListAfterSuccess(result, draftId);
+    pulseButton(generateVideoBtn, result.ok ? "已生成" : "生成失败");
+  } finally {
+    setButtonLoading(generateVideoBtn, false, "按稿生成视频");
   }
 }
 
 async function preparePublishPackage() {
   if (!selectedDraft) return;
-  const draftId = selectedDraft.id;
-  preparePublishBtn.disabled = true;
-  preparePublishBtn.textContent = "准备中...";
-  const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/publish-package`, {
-    method: "POST",
-  });
-  const result = await response.json();
-  if (result.ok) {
-    await navigator.clipboard.writeText(result.combined_text);
-    mergeDraftResult(result, draftId);
-    window.open(result.image_url, "_blank", "noopener,noreferrer");
-    window.open(result.creator_url, "_blank", "noopener,noreferrer");
-    publishPackageInfo.classList.remove("hidden");
-    publishPackageInfo.innerHTML = `
-      发布包已生成：<br>
-      图片：<code>${escapeHtml(result.cover_png)}</code><br>
-      ${result.video_path ? `视频：<code>${escapeHtml(result.video_path)}</code><br>` : ""}
-      文案：<code>${escapeHtml(result.publish_txt)}</code>
-    `;
-    preparePublishBtn.textContent = "发布包已生成";
-  } else {
-    preparePublishBtn.textContent = "准备失败";
-  }
-  setTimeout(() => {
-    preparePublishBtn.disabled = false;
-    preparePublishBtn.textContent = "准备发布包";
-  }, 1800);
+  setActiveTab("publish");
+  await createPublishPackage(preparePublishBtn, "准备发布包");
 }
 
 async function prepareAutoFillXhs() {
   if (!selectedDraft) return;
+  await createPublishPackage(autoFillXhsBtn, "准备小红书填入", true);
+}
+
+async function createPublishPackage(button, idleText, openCreator = false) {
   const draftId = selectedDraft.id;
-  autoFillXhsBtn.disabled = true;
-  autoFillXhsBtn.textContent = "准备中...";
-  const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/publish-package`, {
-    method: "POST",
-  });
-  const result = await response.json();
-  if (result.ok) {
-    await navigator.clipboard.writeText(result.combined_text);
-    mergeDraftResult(result, draftId);
-    publishPackageInfo.classList.remove("hidden");
-    publishPackageInfo.innerHTML = `
-      已选择这篇用于自动填入小红书：<br>
-      图片：<code>${escapeHtml(result.cover_png)}</code><br>
-      ${result.video_path ? `视频：<code>${escapeHtml(result.video_path)}</code><br>` : ""}
-      文案：<code>${escapeHtml(result.publish_txt)}</code><br>
-      请回到 Codex 对话里说：<code>自动填这篇</code>
-    `;
-    window.open(result.creator_url, "_blank", "noopener,noreferrer");
-    autoFillXhsBtn.textContent = "已准备，等 Codex 填入";
-  } else {
-    autoFillXhsBtn.textContent = "准备失败";
+  setButtonLoading(button, true, "准备中...");
+  try {
+    const response = await fetch(`/api/drafts/${encodeURIComponent(draftId)}/publish-package`, { method: "POST" });
+    const result = await response.json();
+    if (result.ok) {
+      await navigator.clipboard.writeText(result.combined_text);
+      mergeDraftResult(result, draftId);
+      publishPackageInfo.classList.remove("hidden");
+      publishPackageInfo.innerHTML = `
+        <strong>发布包已生成，文案已复制。</strong><br>
+        图片：<code>${escapeHtml(result.cover_png)}</code><br>
+        ${result.video_path ? `视频：<code>${escapeHtml(result.video_path)}</code><br>` : ""}
+        文案：<code>${escapeHtml(result.publish_txt)}</code>
+      `;
+      if (result.image_url) window.open(result.image_url, "_blank", "noopener,noreferrer");
+      if (openCreator && result.creator_url) window.open(result.creator_url, "_blank", "noopener,noreferrer");
+      pulseButton(button, "已准备");
+    } else {
+      publishPackageInfo.classList.remove("hidden");
+      publishPackageInfo.textContent = result.error || "发布包生成失败。";
+      pulseButton(button, "准备失败");
+    }
+  } finally {
+    setButtonLoading(button, false, idleText);
   }
-  setTimeout(() => {
-    autoFillXhsBtn.disabled = false;
-    autoFillXhsBtn.textContent = "自动填入小红书";
-  }, 2200);
 }
 
 async function uploadManualImage(event) {
@@ -405,8 +426,21 @@ async function uploadManualImage(event) {
   manualImageInput.value = "";
 }
 
+function setButtonLoading(button, loading, text) {
+  button.disabled = loading;
+  button.textContent = text;
+}
+
+function pulseButton(button, text) {
+  const oldText = button.textContent;
+  button.textContent = text;
+  setTimeout(() => {
+    button.textContent = oldText;
+  }, 1100);
+}
+
 function escapeHtml(value) {
-  return String(value)
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

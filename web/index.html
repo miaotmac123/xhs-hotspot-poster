@@ -3,48 +3,51 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>小红书热点草稿台</title>
+    <title>内容运营工作台</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">XHS Hotspot Poster</p>
-        <h1>小红书热点草稿台</h1>
+        <p class="eyebrow">Content Ops Workbench</p>
+        <h1>热点内容运营工作台</h1>
       </div>
       <div class="top-actions">
-        <button id="refreshBtn" class="icon-button" title="刷新草稿">↻</button>
-        <a class="primary-link" href="https://creator.xiaohongshu.com/" target="_blank" rel="noreferrer">打开创作中心</a>
+        <button id="refreshBtn" class="icon-button" title="刷新列表" aria-label="刷新列表">↻</button>
+        <a class="primary-link" href="https://creator.xiaohongshu.com/" target="_blank" rel="noreferrer">小红书创作中心</a>
       </div>
     </header>
 
     <main class="shell">
-      <section class="sidebar" aria-label="草稿列表">
+      <aside class="sidebar" aria-label="草稿列表">
         <div class="stats">
           <div>
             <span id="draftCount">0</span>
-            <small>草稿</small>
+            <small>最新草稿</small>
           </div>
           <div>
             <span id="fallbackCount">0</span>
             <small>需处理</small>
           </div>
         </div>
+
         <div class="list-header">
           <div class="list-title-row">
-            <h2>每日草稿</h2>
+            <h2>最新 10 条</h2>
             <button id="generateOnceBtn" class="copy-button small-button">生成今日热点</button>
           </div>
+          <div id="latestInfo" class="sidebar-hint">等待刷新</div>
           <div id="generateOnceStatus" class="sidebar-status hidden"></div>
-          <input id="searchInput" type="search" placeholder="搜索标题或标签" />
+          <input id="searchInput" type="search" placeholder="搜索标题、标签或日期" />
         </div>
-        <div id="draftList" class="draft-list"></div>
-      </section>
 
-      <section class="preview" aria-label="草稿预览">
+        <div id="draftList" class="draft-list"></div>
+      </aside>
+
+      <section class="preview" aria-label="内容审核工作区">
         <div id="emptyState" class="empty-state">
           <h2>选择一篇草稿</h2>
-          <p>左侧会展示 `output/` 目录里的每日生成结果。</p>
+          <p>左侧展示 `output/` 里的最新草稿。生成、审核、视频和发布包都在这里完成。</p>
         </div>
 
         <article id="draftDetail" class="draft-detail hidden">
@@ -53,103 +56,138 @@
               <p id="dateText" class="eyebrow"></p>
               <h2 id="topicText"></h2>
             </div>
-            <span id="statusBadge" class="badge"></span>
+            <div class="detail-actions">
+              <span id="statusBadge" class="badge"></span>
+              <button id="preparePublishBtn" class="copy-button">准备发布包</button>
+            </div>
           </div>
 
           <div class="cover-strip">
-            <span>封面</span>
+            <span>封面文案</span>
             <strong id="coverText"></strong>
           </div>
 
-          <section class="publish-panel">
-            <div>
-              <h3>发布草稿助手</h3>
-              <p>为当前选中的草稿准备发布包，并打开小红书创作中心。</p>
-            </div>
-            <div class="button-row">
-              <button id="preparePublishBtn" class="copy-button">准备发布包</button>
-              <button id="autoFillXhsBtn" class="primary-button">自动填入小红书</button>
-            </div>
-          </section>
-          <div id="publishPackageInfo" class="publish-info hidden"></div>
+          <nav class="tabs" aria-label="草稿模块">
+            <button class="tab-button active" data-tab="draft">草稿</button>
+            <button class="tab-button" data-tab="cover">封面 / 配图</button>
+            <button class="tab-button" data-tab="video">视频</button>
+            <button class="tab-button" data-tab="publish">发布包</button>
+          </nav>
 
-          <section class="image-panel">
-            <div class="section-title">
-              <h3>封面 / 配图</h3>
-              <div class="button-row">
-                <button id="generateImageBtn" class="copy-button">本地生成封面</button>
-                <button id="generateAiImageBtn" class="copy-button">大模型生成图</button>
-                <label class="copy-button file-label">
-                  自己上传
-                  <input id="manualImageInput" type="file" accept="image/png,image/jpeg,image/webp" />
-                </label>
-              </div>
-            </div>
-            <div id="imageError" class="image-error hidden"></div>
-            <div id="imagePreview" class="image-preview">
-              <p>还没有生成图片。</p>
-            </div>
-            <a id="imageOpenLink" class="subtle-link hidden" href="#" target="_blank" rel="noreferrer">打开封面图</a>
-          </section>
+          <div class="workbench-grid">
+            <div class="tab-panels">
+              <section id="tab-draft" class="tab-panel active">
+                <div class="section-title">
+                  <h3>标题备选</h3>
+                  <button data-copy="titles" class="copy-button">复制标题</button>
+                </div>
+                <ol id="titlesList"></ol>
 
-          <section class="video-panel">
-            <div class="section-title">
-              <h3>视频</h3>
-              <div class="button-row">
-                <button id="generateVideoPlanBtn" class="copy-button">生成视频稿</button>
-                <button id="saveVideoScriptBtn" class="copy-button">保存视频稿</button>
-                <button id="generateVideoBtn" class="primary-button">按稿生成视频</button>
-                <a id="videoOpenLink" class="copy-button hidden" href="#" target="_blank" rel="noreferrer">打开视频</a>
-              </div>
-            </div>
-            <div id="videoError" class="image-error hidden"></div>
-            <textarea id="videoScriptInput" class="video-script-input" placeholder="先生成视频稿，确认或修改后再生成视频。"></textarea>
-            <div id="videoMeta" class="video-meta"></div>
-            <div id="videoPreview" class="video-preview">
-              <p>还没有生成视频。</p>
-            </div>
-          </section>
+                <div class="section-title block-title">
+                  <h3>正文</h3>
+                  <button data-copy="body" class="copy-button">复制正文</button>
+                </div>
+                <div id="bodyText" class="body-text"></div>
 
-          <section>
-            <div class="section-title">
-              <h3>标题备选</h3>
-              <button data-copy="titles" class="copy-button">复制标题</button>
-            </div>
-            <ol id="titlesList"></ol>
-          </section>
+                <div class="two-col content-block">
+                  <div>
+                    <div class="section-title">
+                      <h3>话题标签</h3>
+                      <button data-copy="hashtags" class="copy-button">复制标签</button>
+                    </div>
+                    <div id="hashtagList" class="tags"></div>
+                  </div>
+                  <div>
+                    <h3>配图建议</h3>
+                    <ul id="imageIdeas"></ul>
+                  </div>
+                </div>
 
-          <section>
-            <div class="section-title">
-              <h3>正文</h3>
-              <button data-copy="body" class="copy-button">复制正文</button>
-            </div>
-            <div id="bodyText" class="body-text"></div>
-          </section>
+                <div class="two-col content-block">
+                  <div>
+                    <h3>发布前检查</h3>
+                    <ul id="checklist" class="checklist"></ul>
+                  </div>
+                  <div>
+                    <h3>风险提示</h3>
+                    <ul id="riskNotes" class="risk-list"></ul>
+                  </div>
+                </div>
+              </section>
 
-          <section class="two-col">
-            <div>
-              <div class="section-title">
-                <h3>话题标签</h3>
-                <button data-copy="hashtags" class="copy-button">复制标签</button>
-              </div>
-              <div id="hashtagList" class="tags"></div>
-            </div>
-            <div>
-              <h3>配图建议</h3>
-              <ul id="imageIdeas"></ul>
-            </div>
-          </section>
+              <section id="tab-cover" class="tab-panel">
+                <div class="section-title">
+                  <h3>封面 / 配图</h3>
+                  <div class="button-row">
+                    <button id="generateImageBtn" class="copy-button">本地生成封面</button>
+                    <button id="generateAiImageBtn" class="copy-button">大模型生成图</button>
+                    <label class="copy-button file-label">
+                      上传图片
+                      <input id="manualImageInput" type="file" accept="image/png,image/jpeg,image/webp" />
+                    </label>
+                  </div>
+                </div>
+                <div id="imageError" class="message warn hidden"></div>
+                <div id="imagePreview" class="media-preview image-preview">
+                  <p>还没有生成图片。</p>
+                </div>
+                <a id="imageOpenLink" class="subtle-link hidden" href="#" target="_blank" rel="noreferrer">打开封面图</a>
+              </section>
 
-          <section class="two-col">
-            <div>
-              <h3>发布前检查</h3>
-              <ul id="checklist" class="checklist"></ul>
+              <section id="tab-video" class="tab-panel">
+                <div class="section-title">
+                  <div>
+                    <h3>视频文稿</h3>
+                    <p class="section-note">先审口播稿，再生成视频。图文正文不会直接变成视频。</p>
+                  </div>
+                  <div class="button-row">
+                    <button id="generateVideoPlanBtn" class="copy-button">生成视频稿</button>
+                    <button id="saveVideoScriptBtn" class="copy-button">保存视频稿</button>
+                    <button id="generateVideoBtn" class="primary-button">按稿生成视频</button>
+                  </div>
+                </div>
+                <div id="videoError" class="message warn hidden"></div>
+                <textarea id="videoScriptInput" class="video-script-input" placeholder="先生成视频稿，确认或修改后再生成视频。"></textarea>
+                <div id="videoMeta" class="meta-grid"></div>
+                <div id="videoPreview" class="media-preview video-preview">
+                  <p>还没有生成视频。</p>
+                </div>
+                <a id="videoOpenLink" class="subtle-link hidden" href="#" target="_blank" rel="noreferrer">打开视频</a>
+              </section>
+
+              <section id="tab-publish" class="tab-panel">
+                <div class="publish-panel">
+                  <div>
+                    <h3>发布包</h3>
+                    <p>生成标题、正文、标签、封面和视频素材包。自动发布保持人工确认优先。</p>
+                  </div>
+                  <div class="button-row">
+                    <button id="autoFillXhsBtn" class="primary-button">准备小红书填入</button>
+                  </div>
+                </div>
+                <div id="publishPackageInfo" class="publish-info hidden"></div>
+                <div class="platform-grid">
+                  <div>
+                    <strong>小红书</strong>
+                    <span>图文 / 视频发布包</span>
+                  </div>
+                  <div>
+                    <strong>公众号</strong>
+                    <span>待接入长文发布包</span>
+                  </div>
+                  <div>
+                    <strong>视频号 / 抖音</strong>
+                    <span>待接入短视频平台包</span>
+                  </div>
+                </div>
+              </section>
             </div>
-            <div>
-              <h3>风险提示</h3>
-              <ul id="riskNotes" class="risk-list"></ul>
-            </div>
-          </section>
+
+            <aside class="inspect-panel" aria-label="检查面板">
+              <h3>检查面板</h3>
+              <div id="statusPanel" class="status-panel"></div>
+            </aside>
+          </div>
         </article>
       </section>
     </main>

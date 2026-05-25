@@ -52,6 +52,10 @@ def list_drafts(output_dir: Path, limit: int = 10) -> list[dict[str, object]]:
                 "generated_at": data.get("generated_at", ""),
                 "model": data.get("model", ""),
                 "has_error": bool(data.get("generation_error")),
+                "has_image": bool((data.get("generated_image") or {}).get("path")) if isinstance(data.get("generated_image"), dict) else False,
+                "has_video": bool((data.get("generated_video") or {}).get("path")) if isinstance(data.get("generated_video"), dict) else False,
+                "has_image_error": bool(data.get("image_generation_error")),
+                "has_video_error": bool(data.get("video_generation_error")),
                 "hashtags": data.get("hashtags", []),
             }
         )
