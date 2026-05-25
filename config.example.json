@@ -1,0 +1,104 @@
+{
+  "profile": {
+    "brand_name": "我的账号",
+    "niche": "生活方式 / 职场 / 科技 / 美妆，可按你的账号定位修改",
+    "audience": "18-35 岁小红书用户",
+    "tone": "真诚、有信息密度、像真人笔记，不夸张营销"
+  },
+  "generation": {
+    "provider": "deepseek",
+    "posts_per_day": 5,
+    "candidate_count": 8,
+    "model": "deepseek-v4-flash",
+    "temperature": 0.8
+  },
+  "image_generation": {
+    "enabled": true,
+    "provider": "local_cover",
+    "model": "gpt-image-2",
+    "size": "1024x1536",
+    "quality": "high",
+    "style": "赛博感、未来城市、霓虹、杂志封面级构图，但不要出现真实品牌 logo，不要生成新闻人物肖像"
+  },
+  "video_generation": {
+    "enabled": true,
+    "provider": "node_local_card_video",
+    "duration_seconds": 45,
+    "resolution": "1080x1920",
+    "fps": 30,
+    "voice_provider": "macos_say",
+    "voice_name": "Flo (中文（中国大陆）)",
+    "image_providers": [
+      "tencent_wimgs",
+      "pexels",
+      "pixabay",
+      "wikimedia"
+    ],
+    "max_tencent_wimgs_calls_per_video": 2,
+    "voice_rate": 170
+  },
+  "trend_sources": [
+    {
+      "name": "baidu",
+      "type": "baidu_top",
+      "url": "https://top.baidu.com/board?tab=realtime",
+      "enabled": true
+    }
+  ],
+  "manual_topics": [
+    "AI 工具、消费电子和效率变化",
+    "城市楼市政策、成交和居住决策",
+    "消费、就业、利率和家庭预算",
+    "A股行业热点、市场波动和风险管理",
+    "公共事件的信息核实和情绪判断"
+  ],
+  "content_categories": [
+    {
+      "name": "公共信息",
+      "topic": "公共事件和国际关系热点，普通人如何做信息判断",
+      "angle": "结合当天热搜，做信息素养、事实核实和生活化观察；不站队、不煽动、不做政治判断"
+    },
+    {
+      "name": "科技",
+      "topic": "AI、芯片、大厂和消费电子热点，正在怎样影响普通人的工作方式",
+      "angle": "结合当天科技热搜，从效率工具、职业变化、换机决策和数字生活切入"
+    },
+    {
+      "name": "城市房产",
+      "topic": "城市楼市政策、成交变化和居住决策，普通家庭该看哪些信号",
+      "angle": "结合当天房产或城市政策信息，聚焦预算、通勤、学区、政策和现金流，不做买卖建议"
+    },
+    {
+      "name": "经济消费",
+      "topic": "宏观数据、就业、消费和价格变化，和普通人的钱包有什么关系",
+      "angle": "结合当天财经热搜，用通俗语言解释就业、消费、利率、价格和家庭预算"
+    },
+    {
+      "name": "股市",
+      "topic": "A股波动、产业热点和市场情绪下，普通投资者如何保持清醒",
+      "angle": "结合当天市场热点，强调风险提示、仓位纪律和信息筛选，不荐股"
+    }
+  ],
+  "content_filters": {
+    "exclude_keywords": [
+      "习近平",
+      "总统",
+      "特朗普",
+      "中美",
+      "商务部",
+      "刑拘",
+      "警方",
+      "遇难",
+      "死亡",
+      "地震",
+      "战争",
+      "谣言",
+      "通报"
+    ]
+  },
+  "publisher": {
+    "mode": "draft_only",
+    "api_endpoint": "",
+    "api_token_env": "XHS_API_TOKEN"
+  }
+}

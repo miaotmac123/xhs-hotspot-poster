@@ -1,0 +1,14 @@
+.env
+.env.local
+config.json
+__pycache__/
+*.pyc
+output/
+logs/
+tmp/
+node_modules/
+.DS_Store
+
+video-renderer/node_modules/
+video-renderer/.cache/
+*.log

@@ -1,0 +1,12 @@
+{
+  "name": "xhs-hotspot-video-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node src/render.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
