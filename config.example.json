@@ -29,12 +29,13 @@
     "voice_provider": "macos_say",
     "voice_name": "Flo (中文（中国大陆）)",
     "image_providers": [
-      "tencent_wimgs",
       "pexels",
       "pixabay",
-      "wikimedia"
+      "wikimedia",
+      "tencent_wimgs"
     ],
-    "max_tencent_wimgs_calls_per_video": 2,
+    "max_tencent_wimgs_calls_per_video": 1,
+    "tencent_wimgs_min_score": 4200,
     "voice_rate": 170
   },
   "trend_sources": [

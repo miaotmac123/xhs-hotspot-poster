@@ -3,10 +3,10 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 const PALETTES = [
-  ["#101114", "#F5F1E8", "#FF4F7B", "#45E6FF", "#F7D046"],
-  ["#121826", "#F9F7F0", "#7CFFCB", "#FF6A3D", "#8EA7FF"],
-  ["#FFF7E0", "#191919", "#E93F5C", "#0E8A83", "#8B5CF6"],
-  ["#201A1B", "#FFF8EC", "#D93A4A", "#2B6F77", "#FFE16A"],
+  ["#F5EFE6", "#1F2428", "#B83243", "#466B7A", "#D8C5A9"],
+  ["#F3F6F1", "#20251F", "#A13D2D", "#476A56", "#DDE8D4"],
+  ["#F4F0EA", "#202124", "#9C2F42", "#315F72", "#E4DAC9"],
+  ["#F7F3EE", "#1F2328", "#A93A33", "#5B5E76", "#E9DCCB"],
 ];
 
 export async function writeSceneCards({ plan, outputDir, slug }) {
@@ -77,61 +77,62 @@ async function renameIfPossible(from, to) {
 }
 
 function buildSceneSvg(scene, index, total, backgroundDataUri) {
-  const [bg, ink, accent, cyan, yellow] = PALETTES[index % PALETTES.length];
+  const [bg, ink, accent, secondary, paper] = PALETTES[index % PALETTES.length];
   const titleLines = wrapCjk(scene.title, 11, 2);
   const subtitleLines = wrapCjk(scene.subtitle || scene.narration, 23, 3);
   const background = backgroundDataUri
     ? `<image href="${backgroundDataUri}" x="0" y="0" width="1080" height="1920" preserveAspectRatio="xMidYMid slice"/>
   <rect width="1080" height="1920" fill="url(#readableShade)"/>`
-    : buildFallbackVisual(scene, bg, accent, cyan, yellow);
+    : buildFallbackVisual(scene, bg, ink, accent, secondary, paper);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0%" stop-color="${bg}"/>
-      <stop offset="55%" stop-color="${shiftColor(bg, 28)}"/>
-      <stop offset="100%" stop-color="${shiftColor(accent, -36)}"/>
+      <stop offset="100%" stop-color="${paper}"/>
     </linearGradient>
     <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse">
-      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="${cyan}" stroke-width="1" opacity="0.15"/>
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="${secondary}" stroke-width="1" opacity="0.10"/>
     </pattern>
     <linearGradient id="readableShade" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.20"/>
-      <stop offset="22%" stop-color="#000000" stop-opacity="0.12"/>
-      <stop offset="50%" stop-color="#000000" stop-opacity="0.04"/>
-      <stop offset="78%" stop-color="#000000" stop-opacity="0.18"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.42"/>
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
+      <stop offset="35%" stop-color="#000000" stop-opacity="0.06"/>
+      <stop offset="72%" stop-color="#000000" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.32"/>
     </linearGradient>
     <linearGradient id="subtitleShade" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.18"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.46"/>
+      <stop offset="0%" stop-color="#111111" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#111111" stop-opacity="0.88"/>
     </linearGradient>
   </defs>
   ${background}
-  <rect width="1080" height="1920" fill="url(#grid)" opacity="${backgroundDataUri ? "0.03" : "0.10"}"/>
+  <rect width="1080" height="1920" fill="url(#grid)" opacity="${backgroundDataUri ? "0.02" : "1"}"/>
   <text x="82" y="124" fill="#000000" font-size="26" font-weight="760" opacity="0.34" font-family="${fontFamily()}">热点分析</text>
   <text x="80" y="122" fill="#ffffff" font-size="26" font-weight="760" opacity="0.82" font-family="${fontFamily()}">热点分析</text>
   <text x="1002" y="124" fill="#000000" font-size="24" font-weight="760" text-anchor="end" opacity="0.30" font-family="${fontFamily()}">${index + 1}/${total}</text>
   <text x="1000" y="122" fill="#ffffff" font-size="24" font-weight="760" text-anchor="end" opacity="0.72" font-family="${fontFamily()}">${index + 1}/${total}</text>
   <rect x="76" y="456" width="10" height="154" rx="5" fill="${accent}" opacity="0.95"/>
-  ${makeTextLines(titleLines, 108, 526, 104, { fill: "#ffffff", fontSize: 78, fontWeight: 900, shadow: true })}
-  <rect x="72" y="1332" width="936" height="254" rx="22" fill="url(#subtitleShade)" opacity="0.88"/>
+  ${makeTextLines(titleLines, 108, 526, 104, { fill: backgroundDataUri ? "#ffffff" : ink, fontSize: 78, fontWeight: 900, shadow: Boolean(backgroundDataUri) })}
+  <rect x="72" y="1332" width="936" height="254" rx="22" fill="url(#subtitleShade)" opacity="${backgroundDataUri ? "0.86" : "0.94"}"/>
   ${makeTextLines(subtitleLines, 110, 1426, 58, { fill: "#ffffff", fontSize: 42, fontWeight: 780, shadow: true })}
 </svg>`;
 }
 
-function buildFallbackVisual(scene, bg, accent, cyan, yellow) {
+function buildFallbackVisual(scene, bg, ink, accent, secondary, paper) {
   if (scene.visualType === "chart") {
     return `<rect width="1080" height="1920" fill="url(#bg)"/>
-  <rect x="116" y="680" width="848" height="450" rx="28" fill="#ffffff" opacity="0.16"/>
-  <path d="M170 1020 L300 930 L430 970 L560 810 L700 850 L880 720" fill="none" stroke="${yellow}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M170 1100 L300 1060 L430 1088 L560 1000 L700 1030 L880 940" fill="none" stroke="${cyan}" stroke-width="12" stroke-linecap="round" opacity="0.76"/>
-  <circle cx="880" cy="720" r="20" fill="${accent}"/>`;
+  <rect x="96" y="678" width="888" height="470" rx="30" fill="#ffffff" opacity="0.62" stroke="${ink}" stroke-width="2" stroke-opacity="0.10"/>
+  <path d="M166 1040 L300 962 L430 986 L560 840 L700 874 L898 728" fill="none" stroke="${accent}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M166 1110 L300 1070 L430 1098 L560 1010 L700 1040 L898 948" fill="none" stroke="${secondary}" stroke-width="12" stroke-linecap="round" opacity="0.78"/>
+  <circle cx="898" cy="728" r="20" fill="${accent}"/>
+  <text x="144" y="758" fill="${ink}" font-size="30" font-weight="820" opacity="0.72" font-family="${fontFamily()}">趋势观察</text>`;
   }
   return `<rect width="1080" height="1920" fill="url(#bg)"/>
-  <circle cx="880" cy="520" r="260" fill="${cyan}" opacity="0.22"/>
-  <circle cx="190" cy="1230" r="330" fill="${accent}" opacity="0.24"/>
-  <path d="M120 1120 C300 980 430 1030 560 870 C700 700 850 790 980 660" fill="none" stroke="${yellow}" stroke-width="14" opacity="0.72"/>`;
+  <rect x="96" y="640" width="888" height="510" rx="34" fill="#ffffff" opacity="0.58" stroke="${ink}" stroke-width="2" stroke-opacity="0.08"/>
+  <circle cx="850" cy="560" r="220" fill="${secondary}" opacity="0.16"/>
+  <circle cx="180" cy="1210" r="320" fill="${accent}" opacity="0.10"/>
+  <path d="M140 1030 C320 900 450 960 570 810 C710 640 850 760 956 626" fill="none" stroke="${accent}" stroke-width="12" opacity="0.72"/>
+  <text x="144" y="742" fill="${ink}" font-size="30" font-weight="820" opacity="0.72" font-family="${fontFamily()}">信息简报</text>`;
 }
 
 function wrapCjk(text, width, maxLines) {

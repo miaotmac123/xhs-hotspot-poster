@@ -119,7 +119,9 @@ async function findTencentWimgsImage({ query, imageDir, slug, index, searchCache
       }
     })
     .filter(Boolean);
-  const image = pickBestTencentImage(images);
+  const image = pickBestTencentImage(images, {
+    minScore: Number(config.video_generation?.tencent_wimgs_min_score ?? 4200),
+  });
   if (!image) return null;
 
   const imageUrl = image.origPicUrl || image.thumbnailUrl;
@@ -245,18 +247,18 @@ async function findWikimediaImage({ query, imageDir, slug, index }) {
 function imageProviderOrder(config) {
   const configured = config.video_generation?.image_providers;
   if (Array.isArray(configured)) return configured;
-  return ["tencent_wimgs", "pexels", "pixabay", "wikimedia"];
+  return ["pexels", "pixabay", "wikimedia", "tencent_wimgs"];
 }
 
 function hasRemoteProvider(providerOrder) {
   return providerOrder.some((provider) => ["tencent_wimgs", "pexels", "pixabay", "wikimedia"].includes(provider));
 }
 
-function pickBestTencentImage(images) {
+function pickBestTencentImage(images, { minScore = 4200 } = {}) {
   const valid = images.filter((image) => image && (image.origPicUrl || image.thumbnailUrl));
   valid.sort((a, b) => scoreTencentImage(b) - scoreTencentImage(a));
   const best = valid[0] || null;
-  if (!best || scoreTencentImage(best) < 1200) return null;
+  if (!best || scoreTencentImage(best) < minScore) return null;
   return best;
 }
 
@@ -266,8 +268,10 @@ function scoreTencentImage(image) {
   const verticalBonus = height >= width ? 900 : 0;
   const sizeScore = Math.min(width * height, 2_000_000) / 1000;
   const sourceScore = sourceQualityScore(image.siteName || image.siteUrl || "");
-  const titlePenalty = /头像|表情|logo|壁纸|卡通|漫画|大涨|暴涨|涨停|炒股秘籍|手把手|离奇|账户被盗|庄股/.test(`${image.title || ""}${image.siteName || ""}`) ? -2500 : 0;
-  return verticalBonus + sizeScore + sourceScore + titlePenalty;
+  const noisyTitlePenalty = /头像|表情|logo|壁纸|卡通|漫画|大涨|暴涨|涨停|炒股秘籍|手把手|离奇|账户被盗|庄股|怎么买|韭菜|一夜暴富|牛股|妖股/.test(`${image.title || ""}${image.siteName || ""}`) ? -3000 : 0;
+  const tinyPenalty = width < 900 || height < 600 ? -1400 : 0;
+  const veryWidePenalty = width > height * 2 ? -1200 : 0;
+  return verticalBonus + sizeScore + sourceScore + noisyTitlePenalty + tinyPenalty + veryWidePenalty;
 }
 
 function sourceQualityScore(source) {

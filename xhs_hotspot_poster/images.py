@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import random
 import shutil
 import subprocess
 import textwrap
@@ -15,11 +14,11 @@ from .openai_client import create_image
 from .storage import render_markdown, slugify
 
 
-LOCAL_COVER_PALETTES = [
-    ("#101114", "#F5F1E8", "#FF4F7B", "#45E6FF", "#F7D046"),
-    ("#F8EDEB", "#201A1B", "#D93A4A", "#2B6F77", "#FFE16A"),
-    ("#121826", "#F9F7F0", "#7CFFCB", "#FF6A3D", "#8EA7FF"),
-    ("#FFF7E0", "#191919", "#E93F5C", "#0E8A83", "#8B5CF6"),
+LOCAL_COVER_THEMES = [
+    ("#F8F2E8", "#1E2428", "#B73242", "#466B7A", "#E7D4B5"),
+    ("#F3F6F1", "#20251F", "#A13D2D", "#476A56", "#DDE8D4"),
+    ("#F4F0EA", "#202124", "#9C2F42", "#315F72", "#E4DAC9"),
+    ("#F7F3EE", "#1F2328", "#A93A33", "#5B5E76", "#E9DCCB"),
 ]
 
 
@@ -182,71 +181,68 @@ def render_svg_to_png(svg_path: Path) -> Path | None:
 
 
 def build_local_cover_svg(*, cover_text: str, topic: str, hashtags: list[str]) -> str:
-    bg, ink, accent, cyan, yellow = random.choice(LOCAL_COVER_PALETTES)
-    title_lines = wrap_cjk(cover_text, width=7, max_lines=3)
-    topic_lines = wrap_cjk(topic, width=19, max_lines=2)
-    tag_text = "  ".join(hashtags) if hashtags else "#热点  #小红书"
-    title_font_size = 92 if max(len(line) for line in title_lines) <= 7 else 82
-    title_line_height = 108 if title_font_size == 92 else 98
-    title_y = 560 if len(title_lines) <= 2 else 520
-    title_shadow_text = make_text_lines(
-        title_lines,
-        x=90,
-        y=title_y + 4,
-        line_height=title_line_height,
-        fill="#000000",
-        font_size=title_font_size,
-        font_weight=900,
-        opacity=0.34,
-    )
+    bg, ink, accent, secondary, paper = theme_for_text(topic + cover_text)
+    title_lines = wrap_cjk(cover_text, width=8, max_lines=3)
+    topic_lines = wrap_cjk(topic, width=18, max_lines=2)
+    tag_text = "  ".join(hashtags) if hashtags else "#热点  #内容运营"
+    title_font_size = 88 if max(len(line) for line in title_lines) <= 8 else 78
+    title_line_height = 102 if title_font_size == 88 else 92
+    title_y = 568 if len(title_lines) <= 2 else 526
     title_text = make_text_lines(
         title_lines,
-        x=86,
+        x=112,
         y=title_y,
         line_height=title_line_height,
-        fill="#ffffff",
+        fill=ink,
         font_size=title_font_size,
         font_weight=900,
     )
     topic_text = make_text_lines(
         topic_lines,
-        x=92,
-        y=1098,
+        x=104,
+        y=1114,
         line_height=44,
         fill=ink,
-        font_size=31,
+        font_size=30,
         font_weight=760,
-        opacity=0.84,
+        opacity=0.74,
     )
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536">
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0%" stop-color="{bg}"/>
-      <stop offset="52%" stop-color="{shift_color(bg, 22)}"/>
-      <stop offset="100%" stop-color="{shift_color(accent, -30)}"/>
+      <stop offset="100%" stop-color="{paper}"/>
     </linearGradient>
-    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
-      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="{escape(cyan)}" stroke-width="1" opacity="0.16"/>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse">
+      <path d="M 54 0 L 0 0 0 54" fill="none" stroke="{escape(secondary)}" stroke-width="1" opacity="0.10"/>
     </pattern>
   </defs>
   <rect width="1024" height="1536" fill="url(#bg)"/>
-  <rect width="1024" height="1536" fill="url(#grid)" opacity="0.72"/>
-  <circle cx="838" cy="248" r="250" fill="{escape(cyan)}" opacity="0.18"/>
-  <circle cx="172" cy="1250" r="305" fill="{escape(accent)}" opacity="0.16"/>
-  <path d="M58 336 C232 210 386 288 514 172 C668 32 832 98 960 54" fill="none" stroke="{escape(yellow)}" stroke-width="10" opacity="0.72"/>
-  <rect x="56" y="96" width="912" height="1344" rx="42" fill="#ffffff" opacity="0.20" stroke="{escape(ink)}" stroke-width="2" stroke-opacity="0.16"/>
-  <text x="82" y="202" fill="{escape(ink)}" font-size="38" font-weight="850" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif" letter-spacing="0">今日热点笔记</text>
-  <text x="82" y="256" fill="{escape(ink)}" font-size="26" font-weight="650" opacity="0.72" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">先看结论，再看影响</text>
-  <rect x="72" y="404" width="880" height="486" rx="34" fill="#1c1d21" opacity="0.90"/>
-  <rect x="72" y="404" width="14" height="486" rx="7" fill="{escape(accent)}"/>
-  {title_shadow_text}
+  <rect width="1024" height="1536" fill="url(#grid)"/>
+  <rect x="56" y="72" width="912" height="1392" rx="30" fill="#ffffff" opacity="0.58" stroke="{escape(ink)}" stroke-width="2" stroke-opacity="0.12"/>
+  <rect x="86" y="104" width="852" height="1318" rx="22" fill="#ffffff" opacity="0.56"/>
+  <text x="104" y="188" fill="{escape(ink)}" font-size="34" font-weight="850" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif" letter-spacing="0">今日热点简报</text>
+  <text x="104" y="238" fill="{escape(ink)}" font-size="24" font-weight="650" opacity="0.62" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">先看结论，再看影响</text>
+  <text x="918" y="188" fill="{escape(accent)}" font-size="28" font-weight="850" text-anchor="end" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">REPORT</text>
+  <path d="M104 326 H920" stroke="{escape(ink)}" stroke-width="2" opacity="0.16"/>
+  <path d="M104 378 H310" stroke="{escape(accent)}" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="820" cy="410" r="126" fill="{escape(secondary)}" opacity="0.12"/>
+  <circle cx="890" cy="1190" r="190" fill="{escape(accent)}" opacity="0.08"/>
+  <rect x="96" y="462" width="832" height="410" rx="26" fill="#ffffff" opacity="0.72" stroke="{escape(ink)}" stroke-width="2" stroke-opacity="0.08"/>
+  <rect x="96" y="462" width="12" height="410" rx="6" fill="{escape(accent)}"/>
   {title_text}
   {topic_text}
-  <rect x="82" y="1210" width="860" height="88" rx="44" fill="#1c1d21" opacity="0.90"/>
-  <text x="122" y="1267" fill="#ffffff" font-size="28" font-weight="800" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">{escape(tag_text)}</text>
-  <text x="82" y="1364" fill="{escape(ink)}" font-size="24" font-weight="700" opacity="0.66" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">自动生成草稿 · 发布前请核实事实</text>
+  <rect x="104" y="1212" width="816" height="82" rx="18" fill="{escape(ink)}" opacity="0.92"/>
+  <text x="138" y="1265" fill="#ffffff" font-size="26" font-weight="760" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">{escape(tag_text)}</text>
+  <path d="M104 1346 H920" stroke="{escape(ink)}" stroke-width="2" opacity="0.14"/>
+  <text x="104" y="1394" fill="{escape(ink)}" font-size="23" font-weight="700" opacity="0.58" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif">自动生成草稿 · 发布前请核实事实与素材授权</text>
 </svg>
 """
+
+
+def theme_for_text(text: str) -> tuple[str, str, str, str, str]:
+    index = sum(ord(char) for char in text) % len(LOCAL_COVER_THEMES)
+    return LOCAL_COVER_THEMES[index]
 
 
 def wrap_cjk(text: str, width: int, max_lines: int) -> list[str]:
