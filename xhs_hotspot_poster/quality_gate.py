@@ -79,11 +79,32 @@ def evaluate_post(post: dict[str, Any], config: AppConfig) -> dict[str, Any]:
         if not risks:
             add_check("risk_notes", "warn", "财经/房产类建议保留风险提示")
 
+    if post.get("content_origin") == "x_paste":
+        evaluate_x_paste_post(post, checks, add_check)
+
+    evaluate_writing_pipeline(post, checks, add_check)
+
     fail_count = sum(1 for item in checks if item["status"] == "fail")
     warn_count = sum(1 for item in checks if item["status"] == "warn")
-    publish_ready = fail_count == 0 and bool(voiceover)
-    if tier == "publish" and video_cfg.get("enabled", True):
-        publish_ready = publish_ready and bool(generated_video.get("path")) and generated_video.get("voice_provider") != "macos_say"
+    if post.get("content_origin") == "x_paste":
+        publish_ready = fail_count == 0 and len(str(post.get("body", "")).strip()) >= 80
+        wechat = (post.get("platform_packages") or {}).get("wechat") if isinstance(post.get("platform_packages"), dict) else {}
+        if wechat:
+            publish_ready = publish_ready and len(str(wechat.get("body", "")).strip()) >= 120
+    else:
+        publish_ready = fail_count == 0 and len(body) >= 80
+        wp = post.get("writing_pipeline") if isinstance(post.get("writing_pipeline"), dict) else {}
+        if wp.get("enabled"):
+            proofread_score = wp.get("proofread_score")
+            if proofread_score is not None and int(proofread_score) < int((wp.get("proofread") or {}).get("pass_score", 85)):
+                publish_ready = False
+            critique_scores = wp.get("critique_scores") or []
+            pass_score = int(wp.get("critique_pass_score", 70))
+            if critique_scores and max(int(item) for item in critique_scores) < pass_score:
+                publish_ready = False
+        if tier == "publish" and video_cfg.get("enabled", True):
+            if generated_video.get("path") and generated_video.get("voice_provider") == "macos_say":
+                publish_ready = False
 
     return {
         "score": max(0, min(100, score)),
@@ -93,3 +114,56 @@ def evaluate_post(post: dict[str, Any], config: AppConfig) -> dict[str, Any]:
         "summary": f"{fail_count} 项未通过，{warn_count} 项待优化",
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
     }
+
+
+def evaluate_x_paste_post(
+    post: dict[str, Any],
+    checks: list[dict[str, Any]],
+    add_check: Any,
+) -> None:
+    source = post.get("source_material") if isinstance(post.get("source_material"), dict) else {}
+    raw_text = str(source.get("raw_text", "")).strip()
+    add_check("source_present", "pass" if len(raw_text) >= 80 else "fail", "需要保留完整原文作为搬运依据")
+
+    xhs = (post.get("platform_packages") or {}).get("xiaohongshu") if isinstance(post.get("platform_packages"), dict) else {}
+    wechat = (post.get("platform_packages") or {}).get("wechat") if isinstance(post.get("platform_packages"), dict) else {}
+    attr = str(xhs.get("attribution_line") or wechat.get("attribution_line") or "").strip()
+    add_check("attribution_present", "pass" if attr else "fail", "搬运稿必须带来源标注")
+
+    if post.get("repurpose_error"):
+        add_check("repurpose_error", "fail", "忠实本地化失败，请重试或人工编辑")
+
+    if post.get("manual_review_required", True):
+        add_check("manual_review", "warn", "搬运内容默认需人工审核后再发布")
+
+
+def evaluate_writing_pipeline(
+    post: dict[str, Any],
+    checks: list[dict[str, Any]],
+    add_check: Any,
+) -> None:
+    wp = post.get("writing_pipeline") if isinstance(post.get("writing_pipeline"), dict) else {}
+    if not wp.get("enabled"):
+        return
+
+    proofread_score = wp.get("proofread_score")
+    pass_score = int((wp.get("proofread") or {}).get("pass_score", 85))
+    if proofread_score is not None:
+        status = "pass" if int(proofread_score) >= pass_score else "fail"
+        add_check(
+            "proofread_score",
+            status,
+            f"AI腔检测 {proofread_score}/{pass_score} 分",
+            weight=12,
+        )
+
+    critique_scores = wp.get("critique_scores") or []
+    critique_pass = int(wp.get("critique_pass_score", 70))
+    if critique_scores:
+        best = max(int(item) for item in critique_scores)
+        status = "pass" if best >= critique_pass else "fail"
+        trail = "→".join(str(item) for item in critique_scores)
+        add_check("critique_score", status, f"评委 {trail}（及格 {critique_pass}）", weight=12)
+
+    if wp.get("critique_error"):
+        add_check("critique_error", "warn", "评委循环未完成，请人工复核")

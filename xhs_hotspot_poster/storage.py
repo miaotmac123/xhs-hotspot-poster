@@ -37,12 +37,56 @@ def render_markdown(post: dict[str, Any]) -> str:
     generated_image_block = ""
     if generated_image.get("path"):
         generated_image_block = f'\n![生成配图]({generated_image["path"]})\n'
+
+    origin = post.get("content_origin", "hotspot")
+    origin_line = f"\n**内容来源**：{origin}\n" if origin != "hotspot" else ""
+
+    source_block = ""
+    source_material = post.get("source_material") if isinstance(post.get("source_material"), dict) else {}
+    if source_material.get("raw_text"):
+        author = source_material.get("author") or "未知"
+        url = source_material.get("source_url") or ""
+        source_block = f"""
+## 原文摘要（搬运依据）
+
+- 作者：{author}
+- 链接：{url or "未提供"}
+- 字数：{source_material.get("char_count", len(str(source_material.get("raw_text", ""))))}
+
+<details>
+<summary>展开原文</summary>
+
+{source_material.get("raw_text", "")}
+
+</details>
+"""
+
+    wechat_block = ""
+    packages = post.get("platform_packages") if isinstance(post.get("platform_packages"), dict) else {}
+    wechat = packages.get("wechat") if isinstance(packages.get("wechat"), dict) else {}
+    if wechat.get("body"):
+        wechat_block = f"""
+## 公众号版
+
+**标题**：{wechat.get("title", "")}
+
+**摘要**：{wechat.get("summary", "")}
+
+{wechat.get("body", "")}
+"""
+
+    repurpose = post.get("repurpose") if isinstance(post.get("repurpose"), dict) else {}
+    summary_block = ""
+    if repurpose.get("source_summary"):
+        summary_block = f"\n## 原文核心（中文）\n\n{repurpose['source_summary']}\n"
+
     return f"""# {post.get("selected_topic", "小红书草稿")}
+{origin_line}
 
 ## 切入角度
 
 {post.get("angle", "")}
-
+{summary_block}{source_block}
 ## 标题备选
 
 {titles}
@@ -74,4 +118,5 @@ def render_markdown(post: dict[str, Any]) -> str:
 ## 发布前检查
 
 {checklist}
+{wechat_block}
 """

@@ -10,8 +10,13 @@ from xml.sax.saxutils import escape
 from typing import Any, Optional
 
 from .config import AppConfig
+from .jimeng_image import JimengImageError, create_jimeng_image
 from .openai_client import create_image
 from .storage import render_markdown, slugify
+
+
+class ImageGenerationError(RuntimeError):
+    pass
 
 
 LOCAL_COVER_THEMES = [
@@ -44,11 +49,64 @@ Output feel: creative, polished, scroll-stopping, cyber, high contrast, suitable
 """
 
 
+def image_provider(config: AppConfig, *, ai_button: bool = False) -> str:
+    image_cfg = config.data.get("image_generation") if isinstance(config.data.get("image_generation"), dict) else {}
+    if ai_button:
+        return str(image_cfg.get("ai_provider") or "jimeng")
+    return str(image_cfg.get("provider") or "local_cover")
+
+
 def generate_image_for_post(post: dict[str, Any], config: AppConfig, draft_path: Path) -> Path:
-    provider = config.data.get("image_generation", {}).get("provider", "local_cover")
+    return generate_image_with_provider(post, config, draft_path, provider=image_provider(config))
+
+
+def generate_ai_image_for_post(post: dict[str, Any], config: AppConfig, draft_path: Path) -> Path:
+    return generate_image_with_provider(post, config, draft_path, provider=image_provider(config, ai_button=True))
+
+
+def generate_image_with_provider(
+    post: dict[str, Any],
+    config: AppConfig,
+    draft_path: Path,
+    *,
+    provider: str,
+) -> Path:
     if provider == "local_cover":
         return generate_local_cover_for_post(post, config, draft_path)
-    return generate_openai_image_for_post(post, config, draft_path)
+    if provider == "jimeng":
+        return generate_jimeng_image_for_post(post, config, draft_path)
+    if provider in {"openai_image", "openai"}:
+        return generate_openai_image_for_post(post, config, draft_path)
+    raise ImageGenerationError(f"不支持的图片 provider：{provider}。可用：local_cover、jimeng、openai_image。")
+
+
+def generate_jimeng_image_for_post(post: dict[str, Any], config: AppConfig, draft_path: Path) -> Path:
+    prompt = build_image_prompt(post, config)
+    image_bytes, meta = create_jimeng_image(prompt=prompt, config=config)
+
+    assets_dir = draft_path.parent / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%H%M%S")
+    name = f"{stamp}-{slugify(str(post.get('selected_topic', 'cover')))}-jimeng.png"
+    image_path = assets_dir / name
+    image_path.write_bytes(image_bytes)
+
+    relative = image_path.relative_to(config.output_dir).as_posix()
+    post["generated_image"] = {
+        "path": relative,
+        "provider": "jimeng",
+        "prompt": prompt,
+        "model": meta.get("model", ""),
+        "size": meta.get("size", ""),
+        "quality": "generated",
+        "image_url": meta.get("image_url", ""),
+        "estimated_cost_cny": meta.get("estimated_cost_cny", 0),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    post.pop("image_generation_error", None)
+    draft_path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+    draft_path.with_suffix(".md").write_text(render_markdown(post), encoding="utf-8")
+    return image_path
 
 
 def generate_openai_image_for_post(post: dict[str, Any], config: AppConfig, draft_path: Path) -> Path:

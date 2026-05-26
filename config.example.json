@@ -3,14 +3,54 @@
     "brand_name": "我的账号",
     "niche": "生活方式 / 职场 / 科技 / 美妆，可按你的账号定位修改",
     "audience": "18-35 岁小红书用户",
-    "tone": "真诚、有信息密度、像真人笔记，不夸张营销"
+    "tone": "克制、具体、像朋友聊天；有信息密度，不喊口号、不震惊体"
+  },
+  "writing_style": {
+    "tone": "克制、具体、像朋友聊天；有信息密度，不喊口号",
+    "temperature": 0.6,
+    "avoid_phrases": [
+      "震撼",
+      "绝了",
+      "封神",
+      "天花板",
+      "神仙",
+      "必看",
+      "爆哭",
+      "我不允许你不知道",
+      "家人们谁懂啊",
+      "姐妹们冲",
+      "狠狠",
+      "绝绝子"
+    ],
+    "title_rules": [
+      "标题用陈述或具体问题，不用连续感叹号",
+      "不用「震惊」「爆」「必看」等标题党词"
+    ],
+    "body_rules": [
+      "短段落，一段一个意思；多用具体事实和步骤",
+      "少用 emoji；不用「家人们」「姐妹们」开头",
+      "结尾收束即可，不煽动转发"
+    ],
+    "xiaohongshu_rules": [
+      "像真人笔记：观察 + 可执行建议，不要空洞形容词堆砌"
+    ]
+  },
+  "content_brief": {
+    "enabled": true
+  },
+  "writing_pipeline": {
+    "enabled": true,
+    "proofread_enabled": true,
+    "critique_enabled": true,
+    "pass_score": 70,
+    "max_rounds": 2
   },
   "generation": {
     "provider": "deepseek",
     "posts_per_day": 5,
     "candidate_count": 8,
     "model": "deepseek-v4-flash",
-    "temperature": 0.8
+    "temperature": 0.6
   },
   "quality_tier": "standard",
   "quality_profiles": {
@@ -42,17 +82,25 @@
         "burn_subtitles": true
       },
       "image_generation": {
-        "provider": "openai_image"
+        "provider": "jimeng"
       }
     }
   },
   "image_generation": {
     "enabled": true,
     "provider": "local_cover",
+    "ai_provider": "jimeng",
     "model": "gpt-image-2",
     "size": "1024x1536",
     "quality": "high",
-    "style": "赛博感、未来城市、霓虹、杂志封面级构图，但不要出现真实品牌 logo，不要生成新闻人物肖像"
+    "style": "赛博感、未来城市、霓虹、杂志封面级构图，但不要出现真实品牌 logo，不要生成新闻人物肖像",
+    "jimeng_api_key_env": "ARK_API_KEY",
+    "jimeng_model_env": "ARK_IMAGE_MODEL",
+    "jimeng_endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    "jimeng_size": "1440x2560",
+    "jimeng_response_format": "b64_json",
+    "jimeng_watermark": false,
+    "jimeng_unit_cost_cny": 0.25
   },
   "video_generation": {
     "enabled": true,
@@ -75,7 +123,7 @@
     "jimeng_model_env": "ARK_IMAGE_MODEL",
     "jimeng_endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
     "jimeng_size": "1440x2560",
-    "jimeng_response_format": "url",
+    "jimeng_response_format": "b64_json",
     "jimeng_watermark": false,
     "jimeng_unit_cost_cny": 0.25,
     "jimeng_quota_total": 200,
@@ -159,5 +207,16 @@
     "mode": "draft_only",
     "api_endpoint": "",
     "api_token_env": "XHS_API_TOKEN"
+  },
+  "ingestion": {
+    "x_paste": {
+      "enabled": true,
+      "min_chars": 80
+    }
+  },
+  "repurpose": {
+    "mode": "faithful_localize",
+    "temperature": 0.35,
+    "targets_default": ["xiaohongshu", "wechat"]
   }
 }

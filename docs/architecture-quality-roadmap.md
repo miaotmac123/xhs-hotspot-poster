@@ -2,22 +2,35 @@
 
 > **用途**：本仓库实施计划的权威文档。Cursor Plan 与 Codex（`hotspot-content-engine` skill）改架构、质量、多平台或运营相关代码前，请先读本文。
 >
-> **状态**：规划已确认，代码尚未按阶段落地（截至文档创建时）。实施过程中请在本文件顶部「实施进度」区更新 checkbox。
+> **状态**：阶段 A 与 **B-import（X 粘贴搬运 MVP）** 已落地；其余阶段按 checkbox 推进。实施过程中请在本文件顶部「实施进度」区更新 checkbox。
 >
 > **相关文档**：[business-goal-low-cost-content-ops.md](./business-goal-low-cost-content-ops.md) · [content-engine-architecture.md](./content-engine-architecture.md) · [dashboard-redesign-spec.md](./dashboard-redesign-spec.md) · [CODEX.md](../CODEX.md)
 
 ## 实施进度
 
 - [x] **阶段 A**：视频可发布基线（LLM 口播、腾讯云 TTS、配图评分、质量门禁 v1）
-- [ ] **阶段 B**：图文吸引力（`content_brief`、封面 publish 档）
+- [x] **阶段 B-import（高优）**：X **粘贴全文** → 忠实本地化 → 小红书 + 公众号双稿（`content_origin: x_paste`，无 X API）
+- [x] **阶段 B-文风**：`writing_style` + `xhs-calm-writing` skill（克制小红书文案，配置化禁用词）
+- [x] **阶段 B-质检**：`proofread` + `critique_revise` + `writing_pipeline`（`config/ai_tone_rules.json`）
+- [x] **阶段 B-brief**：`content_brief` 先于成稿（`content_brief.enabled`）
 - [ ] **阶段 C**：多平台触达（小红书 / 视频号 / 抖音 / **今日头条**、`platform_packages`、`performance`）
+- [x] **阶段 C-反馈 MVP**：`data/hit_library.json` + `POST /api/performance` + `hit_library.py`
 - [ ] **阶段 D**：X / YouTube 参考引入（`ingestion`、`source_references`、二次创作）
-- [ ] **阶段 E**：半自动运营（审核队列、内容日历、Publisher Adapter 接口）
+- [x] **阶段 E（MVP）**：`queue/`、`ops/calendar.json`、`ops/cron-pipeline.sh`、`--prepare-slot`、`GET /api/ops/status`、Web 运营面板
+- [ ] **阶段 E（完整）**：审核队列状态机、Publisher Playwright 草稿箱、告警通知
 
 **已确认的产品选择**：
 
 - 外部源：**参考改写**（非原样搬运）；保留 `source_references` 溯源
 - 自动化：**半自动优先**（生成 + 审核 + 发布包/创作中心；无合规 API 不无人值守发帖）
+
+### 外部参考（2025-05）
+
+[Hermes + 头条自动化实战](https://mp.weixin.qq.com/s/eG7ISR5JtW8IwtwjQkwl9Q)（链接有验证墙，分析见 Cursor 计划「公众号文章启发分析」）：
+
+- **可复用**：多工序 Writer（正则 + 评委及格线）、文件队列 + slot、只进草稿箱 + 人审、hit_library 反哺选题、Ops Dashboard 读日志/JSON
+- **不迁移**：不必整体换成 Hermes；用 Python cron + `queue/` + 现有 JSON 事实源即可
+- **全量实施清单**：见仓库内计划文件 `公众号文章启发分析`（Writer 质检 / brief / ops / Web 运营 Tab）
 
 ---
 
@@ -156,9 +169,10 @@ flowchart LR
 
 ### 层 1：内容智能 — 文字吸引力
 
-**模块**：`content_pipeline.py`（或 `brief.py` / `assets.py`），改造 `generator.py`
+**模块**：`content_brief.py`、`content_pipeline.py`、`proofread.py`、`critique_revise.py`，改造 `generator.py` / `repurpose.py`
 
 - `generate_content_brief()` → `facts[]`、`hook_lines[]`、`visual_direction`、`title_hooks[]` 等
+- `run_writing_pipeline()`：初稿 → `proofread`（`config/ai_tone_rules.json`）→ `critique_revise`（&lt;70 重写 ≤2 轮）→ `writing_pipeline` 写入 JSON
 - 派生 `social_post_plan`、`video_script_seed`、预留 `article_plan`
 - 顶层字段 `body`、`title_options` 保持扁平映射，兼容 Web/发布包
 
@@ -222,11 +236,12 @@ flowchart LR
   SEMI --> METRICS
 ```
 
-- **L1**：launchd/cron、`ops/calendar.json`
+- **L1**：launchd/cron、`ops/calendar.json`、`ops/cron-pipeline.sh`、`ops_runner.py --prepare-slot`
+- **L1b**：`queue/pending/{07:00,12:00,...}/` + `.meta.json`（`writing_pipeline` 分数）
 - **L2**：`workflow_status`: draft → in_review → approved → scheduled → published
-- **L3**：`ops/adapters/`；`publisher.mode`: semi_auto / api（仅合规接口）
+- **L3**：`ops/adapters/`；`publisher.mode`: draft_only（cron 层禁止 `--publish` 直发）
 
-**模块**：`ops/scheduler.py`、`ops/adapters/base.py`
+**模块**：`ops_runner.py`、`ops_status.py`、`hit_library.py`（后续 `ops/adapters/`）
 
 ### 层 7：数据闭环
 

@@ -38,6 +38,30 @@
           </div>
           <div id="latestInfo" class="sidebar-hint">等待刷新</div>
           <div id="generateOnceStatus" class="sidebar-status hidden"></div>
+
+          <details class="import-panel" open>
+            <summary>X 粘贴搬运</summary>
+            <p class="import-hint">粘贴推文全文，忠实翻译为小红书 + 公众号两版（不编造事实）。</p>
+            <textarea id="xPasteInput" class="paste-input" rows="8" placeholder="粘贴 X 推文全文（建议 ≥80 字）"></textarea>
+            <input id="xPasteAuthor" class="paste-field" type="text" placeholder="@作者（可选，可自动识别）" />
+            <input id="xPasteUrl" class="paste-field" type="url" placeholder="原文链接（可选）" />
+            <button id="xPasteImportBtn" class="copy-button small-button full-width">忠实本地化导入</button>
+            <div id="xPasteStatus" class="sidebar-status hidden"></div>
+          </details>
+
+          <details class="import-panel ops-panel">
+            <summary>运营 / 队列</summary>
+            <p class="import-hint">查看定时 slot 队列、流水线健康度；录入阅读数据反哺选题。</p>
+            <button id="refreshOpsBtn" class="copy-button small-button full-width">刷新运营状态</button>
+            <div id="opsStatus" class="ops-status"></div>
+            <form id="performanceForm" class="performance-form">
+              <label>阅读数<input id="perfReads" type="number" min="0" value="0" /></label>
+              <label>评论<input id="perfComments" type="number" min="0" value="0" /></label>
+              <button type="submit" class="copy-button small-button full-width">录入当前草稿数据</button>
+            </form>
+            <div id="perfStatus" class="sidebar-status hidden"></div>
+          </details>
+
           <input id="searchInput" type="search" placeholder="搜索标题、标签或日期" />
         </div>
 
@@ -72,6 +96,7 @@
             <button class="tab-button" data-tab="cover">封面 / 配图</button>
             <button class="tab-button" data-tab="video">视频</button>
             <button class="tab-button" data-tab="publish">发布包</button>
+            <button class="tab-button" data-tab="ops">运营</button>
           </nav>
 
           <div class="workbench-grid">
@@ -88,6 +113,26 @@
                   <button data-copy="body" class="copy-button">复制正文</button>
                 </div>
                 <div id="bodyText" class="body-text"></div>
+
+                <section id="wechatSection" class="wechat-section hidden">
+                  <div class="section-title block-title">
+                    <h3>公众号版</h3>
+                    <div class="button-row">
+                      <button data-copy="wechat-title" class="copy-button">复制标题</button>
+                      <button data-copy="wechat-body" class="copy-button">复制正文</button>
+                    </div>
+                  </div>
+                  <p id="wechatTitle" class="wechat-title"></p>
+                  <p id="wechatSummary" class="wechat-summary muted"></p>
+                  <div id="wechatBody" class="body-text"></div>
+                </section>
+
+                <section id="sourceSection" class="source-section hidden">
+                  <details>
+                    <summary>原文依据（搬运）</summary>
+                    <pre id="sourceRawText" class="source-raw"></pre>
+                  </details>
+                </section>
 
                 <div class="two-col content-block">
                   <div>
@@ -120,7 +165,7 @@
                   <h3>封面 / 配图</h3>
                   <div class="button-row">
                     <button id="generateImageBtn" class="copy-button">本地生成封面</button>
-                    <button id="generateAiImageBtn" class="copy-button">大模型生成图</button>
+                    <button id="generateAiImageBtn" class="copy-button">即梦生成封面</button>
                     <label class="copy-button file-label">
                       上传图片
                       <input id="manualImageInput" type="file" accept="image/png,image/jpeg,image/webp" />
@@ -181,13 +226,21 @@
                   </div>
                   <div>
                     <strong>公众号</strong>
-                    <span>待接入长文发布包</span>
+                    <span id="wechatPublishHint">搬运稿含 wechat_body.txt</span>
                   </div>
                   <div>
                     <strong>视频号 / 抖音</strong>
                     <span>待接入短视频平台包</span>
                   </div>
                 </div>
+              </section>
+
+              <section id="tab-ops" class="tab-panel">
+                <h3>运营流水线</h3>
+                <p class="section-note">定时任务示例：<code>python3 -m xhs_hotspot_poster --prepare-slot 07:00 --articles 1</code></p>
+                <div id="opsDetail" class="ops-detail"></div>
+                <h3 class="block-title">最近 cron 日志</h3>
+                <pre id="opsCronLog" class="ops-log"></pre>
               </section>
             </div>
 

@@ -30,6 +30,7 @@ Do not load every skill by default. Load a skill when the task names it or clear
 Planned but not necessarily implemented yet (check `docs/architecture-quality-roadmap.md` progress checkboxes):
 
 - Phase A: LLM video script, publish-tier TTS, image scoring, quality gate
+- Phase B-import: X paste → faithful localize (`ingestion/paste.py`, `repurpose.py`, `POST /api/import/x-paste`)
 - Phase B: `content_brief`, cover publish tier
 - Phase C: `platform_packages` for 小红书 / 视频号 / 抖音 / 今日头条
 - Phase D: X/YouTube reference ingestion (`source_references`, rewrite-only)
@@ -41,6 +42,15 @@ Planned but not necessarily implemented yet (check `docs/architecture-quality-ro
 - `xhs_hotspot_poster/cli.py`: command entry point.
 - `xhs_hotspot_poster/trends.py`: hotspot fetching.
 - `xhs_hotspot_poster/generator.py`: LLM prompt/schema/fallback logic.
+- `xhs_hotspot_poster/writing_style.py`: `config.writing_style` 文风/禁用词/温度（克制小红书文案）。
+- `xhs_hotspot_poster/content_brief.py`: 热点先产出 brief 再成稿（`content_brief.enabled`）。
+- `xhs_hotspot_poster/proofread.py` + `critique_revise.py` + `content_pipeline.py`: 正则去 AI 腔 + 评委循环（`writing_pipeline`）。
+- `xhs_hotspot_poster/ops_runner.py`: `--prepare-slot` / `--ops-status`；`ops/cron-pipeline.sh` + `queue/`。
+- `xhs_hotspot_poster/hit_library.py`: 手动 performance 录入反哺选题。
+- `config/ai_tone_rules.json`: 可配置 AI 腔正则规则。
+- `.cursor/skills/xhs-calm-writing/SKILL.md`: 文风调优说明（Agent 用）。
+- `xhs_hotspot_poster/ingestion/paste.py`: normalize pasted X text (author/URL detection).
+- `xhs_hotspot_poster/repurpose.py`: faithful localize to xiaohongshu + wechat (`content_origin: x_paste`).
 - `xhs_hotspot_poster/video_script.py`: LLM video voiceover seed generation.
 - `xhs_hotspot_poster/quality_gate.py`: publish readiness checks and `quality_report`.
 - `xhs_hotspot_poster/quality_config.py`: merges `quality_profiles` by `quality_tier`.

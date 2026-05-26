@@ -190,14 +190,14 @@ def format_openai_http_error(prefix: str, status_code: int, body: str) -> str:
     if error_code == "billing_hard_limit_reached":
         return (
             "OpenAI 图片生成失败：API 账户已达到 billing hard limit。"
-            "这不是代码问题，需要到 OpenAI Platform 调整用量上限或充值后再试。"
-            "也可以先用“本地生成封面”或上传图片继续流程。"
+            "可在 config.json 将 image_generation.ai_provider 设为 jimeng（即梦/火山方舟），"
+            "或先用「本地生成封面」/上传图片。"
             f" 原始错误：HTTP {status_code} {message}"
         )
     if error_code == "insufficient_quota":
         return (
             "OpenAI 图片生成失败：API 额度或余额不足。"
-            "需要检查 OpenAI Platform billing/usage，或先改用本地封面、上传图片。"
+            "建议改用即梦（ai_provider: jimeng）或本地封面。"
             f" 原始错误：HTTP {status_code} {message}"
         )
     return f"{prefix}: HTTP {status_code} {body}"
@@ -213,6 +213,16 @@ def urlopen_json(request: urllib.request.Request, *, timeout: int) -> dict[str, 
         return read_json_response(request, timeout=timeout, context=context)
 
 
+def urlopen_bytes(request: urllib.request.Request, *, timeout: int) -> bytes:
+    try:
+        return read_bytes_response(request, timeout=timeout)
+    except urllib.error.URLError as exc:
+        if "CERTIFICATE_VERIFY_FAILED" not in str(exc):
+            raise
+        context = ssl._create_unverified_context()
+        return read_bytes_response(request, timeout=timeout, context=context)
+
+
 def read_json_response(
     request: urllib.request.Request,
     *,
@@ -221,3 +231,13 @@ def read_json_response(
 ) -> dict[str, Any]:
     with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def read_bytes_response(
+    request: urllib.request.Request,
+    *,
+    timeout: int,
+    context: Optional[ssl.SSLContext] = None,
+) -> bytes:
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+        return response.read()

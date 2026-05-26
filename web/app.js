@@ -11,6 +11,17 @@ const emptyState = document.querySelector("#emptyState");
 const draftDetail = document.querySelector("#draftDetail");
 const generateOnceBtn = document.querySelector("#generateOnceBtn");
 const generateOnceStatus = document.querySelector("#generateOnceStatus");
+const xPasteInput = document.querySelector("#xPasteInput");
+const xPasteAuthor = document.querySelector("#xPasteAuthor");
+const xPasteUrl = document.querySelector("#xPasteUrl");
+const xPasteImportBtn = document.querySelector("#xPasteImportBtn");
+const xPasteStatus = document.querySelector("#xPasteStatus");
+const refreshOpsBtn = document.querySelector("#refreshOpsBtn");
+const opsStatus = document.querySelector("#opsStatus");
+const opsDetail = document.querySelector("#opsDetail");
+const opsCronLog = document.querySelector("#opsCronLog");
+const performanceForm = document.querySelector("#performanceForm");
+const perfStatus = document.querySelector("#perfStatus");
 const generateImageBtn = document.querySelector("#generateImageBtn");
 const generateAiImageBtn = document.querySelector("#generateAiImageBtn");
 const manualImageInput = document.querySelector("#manualImageInput");
@@ -25,6 +36,9 @@ const publishPackageInfo = document.querySelector("#publishPackageInfo");
 
 document.querySelector("#refreshBtn").addEventListener("click", () => loadDrafts({ keepSelected: true }));
 generateOnceBtn.addEventListener("click", generateDraftsOnce);
+xPasteImportBtn.addEventListener("click", importXPaste);
+refreshOpsBtn.addEventListener("click", loadOpsStatus);
+performanceForm.addEventListener("submit", submitPerformance);
 searchInput.addEventListener("input", renderDraftList);
 generateImageBtn.addEventListener("click", () => generateImageForSelected("local"));
 generateAiImageBtn.addEventListener("click", () => generateImageForSelected("ai"));
@@ -67,6 +81,44 @@ async function loadDrafts(options = {}) {
   if (nextId) await selectDraft(nextId);
 }
 
+async function importXPaste() {
+  const rawText = xPasteInput.value.trim();
+  if (!rawText) {
+    xPasteStatus.classList.remove("hidden");
+    xPasteStatus.textContent = "请先粘贴 X 推文全文。";
+    return;
+  }
+  setButtonLoading(xPasteImportBtn, true, "本地化中...");
+  xPasteStatus.classList.remove("hidden");
+  xPasteStatus.textContent = "正在忠实翻译并改写为小红书 + 公众号，通常需要 30–90 秒。";
+  try {
+    const response = await fetch("/api/import/x-paste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raw_text: rawText,
+        author: xPasteAuthor.value.trim(),
+        source_url: xPasteUrl.value.trim(),
+        targets: ["xiaohongshu", "wechat"],
+      }),
+    });
+    const result = await response.json();
+    if (!result.ok) {
+      xPasteStatus.textContent = result.error || "导入失败，请检查 API 配置。";
+      if (result.draft_id) await loadDrafts({ selectId: result.draft_id });
+      return;
+    }
+    xPasteStatus.textContent = "已生成搬运稿，请在右侧审核小红书与公众号两版。";
+    xPasteInput.value = "";
+    await loadDrafts({ selectId: result.draft_id });
+    setActiveTab("draft");
+  } catch (error) {
+    xPasteStatus.textContent = `导入失败：${error.message}`;
+  } finally {
+    setButtonLoading(xPasteImportBtn, false, "忠实本地化导入");
+  }
+}
+
 async function generateDraftsOnce() {
   setButtonLoading(generateOnceBtn, true, "生成中...");
   generateOnceStatus.classList.remove("hidden");
@@ -99,10 +151,12 @@ function renderDraftList() {
   visibleDrafts.forEach((draft) => {
     const button = document.createElement("button");
     button.className = `draft-card ${selectedDraft?.id === draft.id ? "active" : ""}`;
+    const originBadge = draft.content_origin === "x_paste" ? '<span class="origin-badge">X搬运</span>' : "";
     button.innerHTML = `
       <strong>${escapeHtml(draft.topic)}</strong>
       <div class="draft-meta">
         <span>${escapeHtml(draft.date || "")}</span>
+        ${originBadge}
         ${draft.has_image ? "<span>有封面</span>" : ""}
         ${draft.has_video ? "<span>有视频</span>" : ""}
         ${draft.has_error || draft.has_image_error || draft.has_video_error ? "<span class=\"warn-text\">需处理</span>" : "<span>可审核</span>"}
@@ -135,14 +189,21 @@ function renderDetail(draft) {
   emptyState.classList.add("hidden");
   draftDetail.classList.remove("hidden");
 
-  document.querySelector("#dateText").textContent = `${draft.generated_at || ""} · ${draft.model || ""}`;
+  const originLabel = draft.content_origin === "x_paste" ? "X 粘贴搬运" : "热点生成";
+  document.querySelector("#dateText").textContent = `${draft.generated_at || ""} · ${draft.model || ""} · ${originLabel}`;
   document.querySelector("#topicText").textContent = draft.selected_topic || "未命名草稿";
   document.querySelector("#coverText").textContent = draft.cover_text || "待补充封面文字";
 
-  const hasError = Boolean(draft.generation_error || draft.image_generation_error || draft.video_generation_error);
+  const hasError = Boolean(
+    draft.generation_error || draft.repurpose_error || draft.image_generation_error || draft.video_generation_error,
+  );
   const badge = document.querySelector("#statusBadge");
-  badge.textContent = hasError ? "需处理" : "可审核";
-  badge.className = `badge ${hasError ? "warn" : ""}`;
+  if (draft.content_origin === "x_paste") {
+    badge.textContent = draft.repurpose_error ? "搬运失败" : draft.manual_review_required ? "待审核" : "可审核";
+  } else {
+    badge.textContent = hasError ? "需处理" : "可审核";
+  }
+  badge.className = `badge ${hasError || draft.manual_review_required ? "warn" : ""}`;
 
   fillList("#titlesList", draft.title_options || []);
   document.querySelector("#bodyText").textContent = draft.body || "";
@@ -150,6 +211,7 @@ function renderDetail(draft) {
   fillList("#imageIdeas", draft.image_ideas || []);
   fillList("#checklist", draft.publish_checklist || []);
   fillList("#riskNotes", draft.risk_notes || []);
+  renderWechatAndSource(draft);
 
   renderImage(draft);
   renderVideo(draft);
@@ -191,7 +253,34 @@ function fillTags(selector, tags) {
 function copyTextFor(field, draft) {
   if (field === "titles") return (draft.title_options || []).join("\n");
   if (field === "hashtags") return (draft.hashtags || []).join(" ");
+  const wechat = draft.platform_packages?.wechat || {};
+  if (field === "wechat-title") return wechat.title || "";
+  if (field === "wechat-body") return wechat.body || "";
   return draft.body || "";
+}
+
+function renderWechatAndSource(draft) {
+  const wechatSection = document.querySelector("#wechatSection");
+  const sourceSection = document.querySelector("#sourceSection");
+  const wechat = draft.platform_packages?.wechat || {};
+  const hasWechat = Boolean(wechat.body?.trim());
+  wechatSection.classList.toggle("hidden", !hasWechat);
+  if (hasWechat) {
+    document.querySelector("#wechatTitle").textContent = wechat.title || "公众号标题";
+    document.querySelector("#wechatSummary").textContent = wechat.summary ? `摘要：${wechat.summary}` : "";
+    document.querySelector("#wechatBody").textContent = wechat.body || "";
+  }
+
+  const raw = draft.source_material?.raw_text || "";
+  sourceSection.classList.toggle("hidden", !raw);
+  if (raw) {
+    document.querySelector("#sourceRawText").textContent = raw;
+  }
+
+  const wechatHint = document.querySelector("#wechatPublishHint");
+  if (wechatHint) {
+    wechatHint.textContent = hasWechat ? "发布包含 wechat_*.txt" : "热点稿暂无公众号正文";
+  }
 }
 
 function renderImage(draft) {
@@ -264,10 +353,15 @@ function renderStatusPanel(draft) {
   const image = draft.generated_image || {};
   const usage = video.image_search_usage;
   const quality = draft.quality_report || {};
+  const wp = draft.writing_pipeline || {};
+  const pipelineNote = wp.proofread_score
+    ? `工序：proofread ${wp.proofread_score}${wp.critique_scores?.length ? ` · critique ${wp.critique_scores.join("→")}` : ""}`
+    : "工序：未运行 writing_pipeline";
   const publishReady = quality.publish_ready ? "可发布" : "待优化";
   const qualityScore = Number.isFinite(quality.score) ? `${quality.score} 分` : "未评估";
   const qualityNote = quality.summary || (quality.checks || []).slice(0, 2).map((item) => `${item.name}: ${item.message}`).join("；");
   const errors = [
+    draft.repurpose_error && ["搬运", draft.repurpose_error],
     draft.generation_error && ["草稿", draft.generation_error],
     draft.image_generation_error && ["图片", draft.image_generation_error],
     draft.video_generation_error && ["视频", draft.video_generation_error],
@@ -275,7 +369,8 @@ function renderStatusPanel(draft) {
   ].filter(Boolean);
   node.innerHTML = `
     ${statusRow("草稿", draft.generated_at || "未记录", "生成时间")}
-    ${statusRow("质量", `${qualityScore} · ${publishReady}`, qualityNote || "生成视频稿或视频后自动评估")}
+    ${statusRow("质量", `${qualityScore} · ${publishReady}`, qualityNote || pipelineNote)}
+    ${statusRow("写作工序", pipelineNote, wp.revised ? "已自动修订" : "未修订")}
     ${statusRow("封面", image.path ? "已生成" : "未生成", image.provider || "provider 未记录")}
     ${statusRow("视频", video.path ? "已生成" : "未生成", video.path || "等待生成")}
     ${statusRow("成本", costSummary(video, usage), "只统计已写回的 provider")}
@@ -335,7 +430,7 @@ async function generateImageForSelected(mode = "local") {
     mergeDraftResult(result, draftId);
     await refreshDraftListAfterSuccess(result, draftId);
   } finally {
-    setButtonLoading(button, false, mode === "ai" ? "大模型生成图" : "本地生成封面");
+    setButtonLoading(button, false, mode === "ai" ? "即梦生成封面" : "本地生成封面");
   }
 }
 
@@ -418,10 +513,11 @@ async function createPublishPackage(button, idleText, openCreator = false) {
       mergeDraftResult(result, draftId);
       publishPackageInfo.classList.remove("hidden");
       publishPackageInfo.innerHTML = `
-        <strong>发布包已生成，文案已复制。</strong><br>
+        <strong>发布包已生成，小红书文案已复制。</strong><br>
         图片：<code>${escapeHtml(result.cover_png)}</code><br>
         ${result.video_path ? `视频：<code>${escapeHtml(result.video_path)}</code><br>` : ""}
-        文案：<code>${escapeHtml(result.publish_txt)}</code>
+        小红书：<code>${escapeHtml(result.publish_txt)}</code>
+        ${result.wechat_body_txt ? `<br>公众号：<code>${escapeHtml(result.wechat_body_txt)}</code>` : ""}
       `;
       if (result.image_url) window.open(result.image_url, "_blank", "noopener,noreferrer");
       if (openCreator && result.creator_url) window.open(result.creator_url, "_blank", "noopener,noreferrer");
@@ -491,4 +587,53 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+async function loadOpsStatus() {
+  const response = await fetch("/api/ops/status");
+  const data = await response.json();
+  if (opsStatus) {
+    opsStatus.innerHTML = `
+      <p>队列根目录：<code>${escapeHtml(data.queue_root || "")}</code></p>
+      <p>近稿平均 proofread：<strong>${escapeHtml(String(data.pipeline_avg_proofread || 0))}</strong>（${escapeHtml(String(data.recent_pipeline_samples || 0))} 篇）</p>
+      <p>hit_library：均阅读 ${escapeHtml(String(data.hit_library?.avg_reads ?? 0))} · 命中率 ${escapeHtml(String(data.hit_library?.hit_rate ?? 0))}</p>
+    `;
+  }
+  if (opsDetail) {
+    const slots = (data.slots || [])
+      .map(
+        (slot) =>
+          `<div class="ops-slot"><strong>${escapeHtml(slot.label || slot.id)}</strong> pending ${slot.pending_count} · published ${slot.published_count} · failed ${slot.failed_count}</div>`,
+      )
+      .join("");
+    opsDetail.innerHTML = slots || "<p>暂无 slot 配置，见 ops/calendar.json</p>";
+  }
+  if (opsCronLog) {
+    opsCronLog.textContent = (data.cron_log_tail || []).join("\n") || "暂无 logs/cron.log";
+  }
+}
+
+async function submitPerformance(event) {
+  event.preventDefault();
+  if (!selectedDraft) {
+    perfStatus.classList.remove("hidden");
+    perfStatus.textContent = "请先在左侧选择一篇草稿。";
+    return;
+  }
+  const response = await fetch("/api/performance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      draft_id: selectedDraft.id,
+      reads: Number(document.querySelector("#perfReads").value || 0),
+      comments: Number(document.querySelector("#perfComments").value || 0),
+      shares: 0,
+      platform: "xiaohongshu",
+    }),
+  });
+  const result = await response.json();
+  perfStatus.classList.remove("hidden");
+  perfStatus.textContent = result.ok ? "已录入 hit_library。" : result.error || "录入失败";
+  await loadOpsStatus();
+}
+
 loadDrafts();
+loadOpsStatus();

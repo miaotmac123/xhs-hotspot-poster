@@ -109,6 +109,24 @@ python3 -m xhs_hotspot_poster --serve
 http://127.0.0.1:8765
 ```
 
+左侧 **「X 粘贴搬运」** 面板：粘贴推文全文（建议 ≥80 字），可选填 `@作者` 与原文链接；点击 **忠实本地化导入** 会生成小红书 + 公众号两版稿件（`content_origin: x_paste`），保留原文作为审核依据，不调用 X API。
+
+生成链路默认启用 **content_brief**（先 brief 再成稿）与 **writing_pipeline**（正则去 AI 腔 + 评委修订，分数写入 `writing_pipeline`）。可在 `config.json` 关闭 `critique_enabled` 以节省 LLM 调用。
+
+**运营 / 定时（半自动）**：
+
+```bash
+# 为 07:00 时段准备 1 篇草稿并入队 queue/pending/07:00/
+python3 -m xhs_hotspot_poster --prepare-slot 07:00 --articles 1
+
+# 查看队列与 cron 日志摘要
+python3 -m xhs_hotspot_poster --ops-status
+
+# crontab 示例见 ops/cron-pipeline.sh
+```
+
+Web 侧栏可 **录入阅读数据**（反哺 `data/hit_library.json`）。`publisher.mode: draft_only` 时 CLI 的 `--publish` 会被跳过。
+
 页面里每篇草稿都有 `生成封面图` 按钮。默认生成纯背景 + 大字标题的小红书常见封面，图片会保存到当天目录的 `assets/` 子目录，并自动显示在预览区。
 
 `准备发布到草稿` 会复制标题、正文和标签，自动准备封面图，并打开小红书创作中心。你需要自己登录小红书；程序不会保存账号密码。保存草稿或发布前请人工确认内容。
@@ -122,6 +140,8 @@ title.txt
 body.txt
 hashtags.txt
 ```
+
+搬运稿（X 粘贴）还会额外导出 `wechat_title.txt`、`wechat_summary.txt`、`wechat_body.txt`。
 
 如果浏览器自动化不可用，你只需要上传 `cover.png`，再把 `publish.txt` 粘贴到正文区。
 

@@ -209,6 +209,126 @@ h3 {
   color: var(--amber);
 }
 
+.import-panel {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.import-panel summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.import-hint {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.paste-input,
+.paste-field {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: inherit;
+  background: #fff;
+}
+
+.paste-input {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.origin-badge {
+  background: #efe8ff !important;
+  color: #4a3d8f !important;
+}
+
+.wechat-section,
+.source-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.wechat-title {
+  margin: 8px 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.wechat-summary {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.ops-status,
+.ops-detail {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ops-slot {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f7f4ef;
+}
+
+.ops-log {
+  margin-top: 8px;
+  padding: 10px;
+  max-height: 240px;
+  overflow: auto;
+  background: #f7f4ef;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.performance-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.performance-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.performance-form input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.source-raw {
+  margin: 10px 0 0;
+  padding: 10px;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 7px;
+  background: #f7f4ef;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 input[type="search"] {
   width: 100%;
   min-height: 40px;

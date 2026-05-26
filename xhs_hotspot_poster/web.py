@@ -13,10 +13,21 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from .config import AppConfig, PROJECT_ROOT
-from .images import attach_uploaded_image_to_post, generate_image_for_post, generate_local_cover_for_post, generate_openai_image_for_post
+from .images import (
+    ImageGenerationError,
+    attach_uploaded_image_to_post,
+    generate_ai_image_for_post,
+    generate_image_for_post,
+    generate_local_cover_for_post,
+)
+from .jimeng_image import JimengImageError
 from .openai_client import OpenAIError
 from .quality_gate import evaluate_post
 from .video_bridge import VideoGenerationError, generate_local_video_for_post
+from .hit_library import record_performance
+from .ops_status import collect_ops_status
+from .repurpose import import_and_repurpose_paste
+from .storage import save_post
 from .video_script import generate_video_script_seed
 
 
@@ -64,12 +75,13 @@ def list_drafts(output_dir: Path, limit: int = 10) -> list[dict[str, object]]:
                 "cover_text": data.get("cover_text", ""),
                 "generated_at": data.get("generated_at", ""),
                 "model": data.get("model", ""),
-                "has_error": bool(data.get("generation_error")),
+                "has_error": bool(data.get("generation_error") or data.get("repurpose_error")),
                 "has_image": bool((data.get("generated_image") or {}).get("path")) if isinstance(data.get("generated_image"), dict) else False,
                 "has_video": bool((data.get("generated_video") or {}).get("path")) if isinstance(data.get("generated_video"), dict) else False,
                 "has_image_error": bool(data.get("image_generation_error")),
                 "has_video_error": bool(data.get("video_generation_error")),
                 "hashtags": data.get("hashtags", []),
+                "content_origin": data.get("content_origin", "hotspot"),
             }
         )
         if len(drafts) >= limit:
@@ -88,6 +100,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/drafts":
             self.send_json(list_drafts(self.config.output_dir), head_only=True)
             return
+        if parsed.path == "/api/ops/status":
+            self.send_ops_status(head_only=True)
+            return
         if parsed.path.startswith("/assets/"):
             self.send_output_asset(remove_prefix(parsed.path, "/assets/"), head_only=True)
             return
@@ -97,6 +112,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/drafts":
             self.send_json(list_drafts(self.config.output_dir))
+            return
+        if parsed.path == "/api/ops/status":
+            self.send_ops_status()
             return
         if parsed.path.startswith("/api/drafts/"):
             self.send_draft(remove_prefix(parsed.path, "/api/drafts/"))
@@ -110,6 +128,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/generate-once":
             self.generate_once()
+            return
+        if parsed.path == "/api/import/x-paste":
+            self.import_x_paste()
+            return
+        if parsed.path == "/api/ops/status":
+            self.send_ops_status()
+            return
+        if parsed.path == "/api/performance":
+            self.record_performance()
             return
         if parsed.path.startswith("/api/drafts/") and parsed.path.endswith("/publish-package"):
             draft_id = remove_suffix(remove_prefix(parsed.path, "/api/drafts/"), "/publish-package")
@@ -144,6 +171,84 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.generate_draft_image(draft_id)
             return
         self.send_error(404)
+
+    def send_ops_status(self, *, head_only: bool = False) -> None:
+        status = collect_ops_status(self.config.output_dir)
+        self.send_json(status, head_only=head_only)
+
+    def record_performance(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self.send_json({"ok": False, "error": "请求体不是合法 JSON。"})
+            return
+
+        draft_id = str(payload.get("draft_id", "")).strip()
+        path = self.resolve_output_path(draft_id) if draft_id else None
+        topic = str(payload.get("topic", "")).strip()
+        if path and path.exists():
+            post = json.loads(path.read_text(encoding="utf-8"))
+            topic = topic or str(post.get("selected_topic", ""))
+            post["performance"] = {
+                "platform": str(payload.get("platform", "xiaohongshu")),
+                "reads": int(payload.get("reads", 0)),
+                "comments": int(payload.get("comments", 0)),
+                "shares": int(payload.get("shares", 0)),
+                "recorded_at": datetime_now(),
+            }
+            path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        lib = record_performance(
+            draft_id=draft_id or "manual",
+            topic=topic or "未命名",
+            reads=int(payload.get("reads", 0)),
+            comments=int(payload.get("comments", 0)),
+            shares=int(payload.get("shares", 0)),
+            platform=str(payload.get("platform", "xiaohongshu")),
+        )
+        self.send_json({"ok": True, "hit_library_stats": lib.get("stats", {})})
+
+    def import_x_paste(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self.send_json({"ok": False, "error": "请求体不是合法 JSON。"})
+            return
+
+        raw_text = str(payload.get("raw_text", "")).strip()
+        if not raw_text:
+            self.send_json({"ok": False, "error": "请粘贴 X 推文全文。"})
+            return
+
+        targets = payload.get("targets") or ["xiaohongshu", "wechat"]
+        if not isinstance(targets, list):
+            targets = ["xiaohongshu", "wechat"]
+
+        try:
+            post = import_and_repurpose_paste(
+                self.config,
+                raw_text,
+                author=str(payload.get("author", "")).strip(),
+                source_url=str(payload.get("source_url", "")).strip(),
+                language=str(payload.get("language", "auto")).strip() or "auto",
+                targets=[str(item) for item in targets if str(item) in {"xiaohongshu", "wechat"}],
+            )
+        except ValueError as exc:
+            self.send_json({"ok": False, "error": str(exc)})
+            return
+
+        path = save_post(self.config.output_dir, post)
+        post = persist_draft(path, post, self.config)
+        draft_id = path.relative_to(self.config.output_dir).as_posix()
+        self.send_json({
+            "ok": not bool(post.get("repurpose_error")),
+            "draft_id": draft_id,
+            "draft": post,
+            "drafts": list_drafts(self.config.output_dir),
+            "error": post.get("repurpose_error", ""),
+        })
 
     def generate_once(self) -> None:
         command = [
@@ -206,10 +311,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if provider == "local":
                 image_path = generate_local_cover_for_post(post, self.config, path)
             elif provider == "ai":
-                image_path = generate_openai_image_for_post(post, self.config, path)
+                image_path = generate_ai_image_for_post(post, self.config, path)
             else:
                 image_path = generate_image_for_post(post, self.config, path)
-        except (OpenAIError, ValueError) as exc:
+        except (OpenAIError, JimengImageError, ImageGenerationError, ValueError) as exc:
             post["image_generation_error"] = str(exc)[:1000]
             path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
             self.send_json({"ok": False, "error": str(exc), "draft": post})
@@ -348,11 +453,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
         title = first_title(post)
         body = str(post.get("body", "")).strip()
         hashtags = " ".join(str(tag) for tag in post.get("hashtags", []))
+        wechat_package = {}
+        if isinstance(post.get("platform_packages"), dict):
+            wechat_package = post["platform_packages"].get("wechat") or {}
         video_path = None
         if post.get("generated_video", {}).get("path"):
             video_path = self.config.output_dir / post["generated_video"]["path"]
         video_script = video_script_text(post)
-        export_dir = create_publish_export(path, image_path, title, body, hashtags, video_path=video_path, video_script=video_script)
+        export_dir = create_publish_export(
+            path,
+            image_path,
+            title,
+            body,
+            hashtags,
+            video_path=video_path,
+            video_script=video_script,
+            wechat_title=str(wechat_package.get("title", "")).strip(),
+            wechat_body=str(wechat_package.get("body", "")).strip(),
+            wechat_summary=str(wechat_package.get("summary", "")).strip(),
+        )
         latest_package_path = PROJECT_ROOT / "tmp" / "latest_publish_package.json"
         temp_package_path = Path("/private/tmp/xhs_publish_package.json")
         package = {
@@ -371,6 +490,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "video_path": str(video_path) if video_path and video_path.exists() else "",
             "video_url": f"/assets/{video_path.relative_to(self.config.output_dir).as_posix()}" if video_path and video_path.exists() else "",
             "video_script": video_script,
+            "wechat_title": str(wechat_package.get("title", "")).strip(),
+            "wechat_body": str(wechat_package.get("body", "")).strip(),
+            "wechat_summary": str(wechat_package.get("summary", "")).strip(),
+            "wechat_body_txt": str(export_dir / "wechat_body.txt") if (export_dir / "wechat_body.txt").exists() else "",
             "draft": post,
             "latest_package_json": str(latest_package_path),
             "temp_package_json": str(temp_package_path),
@@ -477,6 +600,9 @@ def create_publish_export(
     *,
     video_path: Path | None = None,
     video_script: str = "",
+    wechat_title: str = "",
+    wechat_body: str = "",
+    wechat_summary: str = "",
 ) -> Path:
     export_dir = draft_path.parent / "publish_packages" / draft_path.stem
     export_dir.mkdir(parents=True, exist_ok=True)
@@ -487,6 +613,10 @@ def create_publish_export(
     (export_dir / "title.txt").write_text(title, encoding="utf-8")
     (export_dir / "body.txt").write_text(body, encoding="utf-8")
     (export_dir / "hashtags.txt").write_text(hashtags, encoding="utf-8")
+    if wechat_body.strip():
+        (export_dir / "wechat_title.txt").write_text(wechat_title or title, encoding="utf-8")
+        (export_dir / "wechat_summary.txt").write_text(wechat_summary, encoding="utf-8")
+        (export_dir / "wechat_body.txt").write_text(wechat_body, encoding="utf-8")
     if video_path and video_path.exists():
         shutil.copy2(video_path, export_dir / "video.mp4")
         (export_dir / "video_script.txt").write_text(video_script, encoding="utf-8")

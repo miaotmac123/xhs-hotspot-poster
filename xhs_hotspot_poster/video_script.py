@@ -29,14 +29,20 @@ def video_script_enabled(config: AppConfig) -> bool:
 
 def build_video_script_prompt(post: dict[str, Any], config: AppConfig) -> str:
     style = str((config.data.get("video_generation") or {}).get("style_preset") or post.get("video_style_preset") or "xiaohongshu")
+    source_material = post.get("source_material") if isinstance(post.get("source_material"), dict) else {}
+    body_excerpt = str(post.get("body", ""))[:1200]
+    if post.get("content_origin") == "x_paste" and source_material.get("raw_text"):
+        body_excerpt = str(source_material.get("raw_text", ""))[:1800]
     return json.dumps(
         {
             "account_profile": config.data.get("profile", {}),
             "style_preset": style,
+            "content_origin": post.get("content_origin", "hotspot"),
             "selected_topic": post.get("selected_topic", ""),
             "angle": post.get("angle", ""),
             "title_options": post.get("title_options", [])[:3],
-            "body_excerpt": str(post.get("body", ""))[:1200],
+            "body_excerpt": body_excerpt,
+            "source_summary": (post.get("repurpose") or {}).get("source_summary", "") if isinstance(post.get("repurpose"), dict) else "",
             "hashtags": post.get("hashtags", [])[:6],
             "risk_notes": post.get("risk_notes", [])[:4],
             "output_schema": {

@@ -1,0 +1,33 @@
+{
+  "timezone": "Asia/Shanghai",
+  "slots": [
+    {
+      "id": "07:00",
+      "label": "早高峰",
+      "prepare_at": "05:30",
+      "articles": 1,
+      "micro_posts": 0
+    },
+    {
+      "id": "12:00",
+      "label": "午休",
+      "prepare_at": "10:30",
+      "articles": 1,
+      "micro_posts": 0
+    },
+    {
+      "id": "18:00",
+      "label": "晚高峰",
+      "prepare_at": "16:00",
+      "articles": 1,
+      "micro_posts": 0
+    },
+    {
+      "id": "21:00",
+      "label": "睡前",
+      "prepare_at": "19:30",
+      "articles": 0,
+      "micro_posts": 0
+    }
+  ]
+}
