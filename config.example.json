@@ -12,6 +12,40 @@
     "model": "deepseek-v4-flash",
     "temperature": 0.8
   },
+  "quality_tier": "standard",
+  "quality_profiles": {
+    "draft": {
+      "video_generation": {
+        "voice_provider": "macos_say",
+        "use_llm_video_script": false,
+        "max_jimeng_calls_per_video": 0,
+        "image_scene_strategy": "reuse_single_premium"
+      },
+      "image_generation": {
+        "provider": "local_cover"
+      }
+    },
+    "standard": {
+      "video_generation": {
+        "voice_provider": "tencent_tts",
+        "use_llm_video_script": true,
+        "max_jimeng_calls_per_video": 1,
+        "image_scene_strategy": "reuse_single_premium"
+      }
+    },
+    "publish": {
+      "video_generation": {
+        "voice_provider": "tencent_tts",
+        "use_llm_video_script": true,
+        "max_jimeng_calls_per_video": 2,
+        "image_scene_strategy": "per_scene_budget",
+        "burn_subtitles": true
+      },
+      "image_generation": {
+        "provider": "openai_image"
+      }
+    }
+  },
   "image_generation": {
     "enabled": true,
     "provider": "local_cover",
@@ -37,8 +71,18 @@
     "tencent_tts_volume": 0,
     "tencent_tts_estimated_unit_cost_per_10k_chars": 0,
     "visual_provider": "jimeng",
-    "jimeng_api_key_env": "JIMENG_API_KEY",
+    "jimeng_api_key_env": "ARK_API_KEY",
+    "jimeng_model_env": "ARK_IMAGE_MODEL",
+    "jimeng_endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    "jimeng_size": "1440x2560",
+    "jimeng_response_format": "url",
+    "jimeng_watermark": false,
+    "jimeng_unit_cost_cny": 0.25,
+    "jimeng_quota_total": 200,
+    "jimeng_quota_used": 0,
+    "max_jimeng_calls_per_video": 1,
     "image_providers": [
+      "jimeng",
       "pexels",
       "pixabay",
       "wikimedia",
@@ -46,7 +90,11 @@
     ],
     "max_tencent_wimgs_calls_per_video": 1,
     "tencent_wimgs_min_score": 4200,
-    "voice_rate": 170
+    "voice_rate": 170,
+    "use_llm_video_script": true,
+    "image_scene_strategy": "reuse_single_premium",
+    "image_min_score": 2800,
+    "burn_subtitles": false
   },
   "trend_sources": [
     {

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export async function renderVideo({ cards, audioPath, outputPath, workDir, fps }) {
+export async function renderVideo({ cards, audioPath, outputPath, workDir, fps, subtitlePath = "", burnSubtitles = false }) {
   const concatPath = path.join(workDir, "scene-list.txt");
   const lines = [];
   for (const card of cards) {
@@ -12,13 +12,19 @@ export async function renderVideo({ cards, audioPath, outputPath, workDir, fps }
   lines.push(`file '${escapeConcatPath(cards[cards.length - 1].imagePath)}'`);
   await writeFile(concatPath, lines.join("\n"), "utf8");
 
+  let videoFilter = `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=${fps || 30},format=yuv420p`;
+  if (burnSubtitles && subtitlePath) {
+    const escaped = escapeSubtitlePath(subtitlePath);
+    videoFilter += `,subtitles=${escaped}`;
+  }
+
   const args = [
     "-y",
     "-f", "concat",
     "-safe", "0",
     "-i", concatPath.toString(),
     "-i", audioPath.toString(),
-    "-vf", `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=${fps || 30},format=yuv420p`,
+    "-vf", videoFilter,
     "-c:v", "libx264",
     "-preset", "veryfast",
     "-crf", "20",
@@ -59,8 +65,12 @@ export async function probeMediaDuration(filePath) {
   return duration;
 }
 
-function escapeConcatPath(path) {
-  return path.toString().replaceAll("'", "'\\''");
+function escapeConcatPath(filePath) {
+  return filePath.toString().replaceAll("'", "'\\''");
+}
+
+function escapeSubtitlePath(filePath) {
+  return `'${filePath.toString().replaceAll("\\", "\\\\").replaceAll(":", "\\:").replaceAll("'", "'\\''")}'`;
 }
 
 function runCommand(command, args, options = {}) {

@@ -247,7 +247,8 @@ function renderVideoMeta(draft) {
   rows.push(["字幕", video.subtitle_path || "未生成"]);
   rows.push(["音频", video.audio_duration_seconds ? `${video.audio_duration_seconds} 秒 · ${video.voice_provider || "未记录"}` : "未生成"]);
   rows.push(["TTS 成本", video.tts_estimated_cost_cny ? `约 ${video.tts_estimated_cost_cny} 元` : "暂无记录"]);
-  rows.push(["腾讯图搜", usage ? `${usage.tencent_wimgs_calls || 0} 次，约 ${usage.estimated_cost_cny || 0} 元` : "未调用或未记录"]);
+  rows.push(["即梦配图", usage ? `${usage.jimeng_calls || 0} 张，约 ${usage.jimeng_estimated_cost_cny || 0} 元，额度 ${usage.jimeng_quota_used_after || 0}/${usage.jimeng_quota_total || 0}` : "未调用或未记录"]);
+  rows.push(["腾讯图搜", usage ? `${usage.tencent_wimgs_calls || 0} 次，约 ${usage.tencent_wimgs_estimated_cost_cny || 0} 元` : "未调用或未记录"]);
   rows.push(["素材来源", sources.length ? sources.slice(0, 3).map((source) => `${source.provider}: ${source.title || source.query || ""}`).join(" / ") : "尚未生成或未拉到外部图片"]);
   node.innerHTML = rows.map(([label, value]) => `
     <div>
@@ -262,19 +263,37 @@ function renderStatusPanel(draft) {
   const video = draft.generated_video || {};
   const image = draft.generated_image || {};
   const usage = video.image_search_usage;
+  const quality = draft.quality_report || {};
+  const publishReady = quality.publish_ready ? "可发布" : "待优化";
+  const qualityScore = Number.isFinite(quality.score) ? `${quality.score} 分` : "未评估";
+  const qualityNote = quality.summary || (quality.checks || []).slice(0, 2).map((item) => `${item.name}: ${item.message}`).join("；");
   const errors = [
     draft.generation_error && ["草稿", draft.generation_error],
     draft.image_generation_error && ["图片", draft.image_generation_error],
     draft.video_generation_error && ["视频", draft.video_generation_error],
+    draft.video_script_generation_error && ["视频稿", draft.video_script_generation_error],
   ].filter(Boolean);
   node.innerHTML = `
     ${statusRow("草稿", draft.generated_at || "未记录", "生成时间")}
+    ${statusRow("质量", `${qualityScore} · ${publishReady}`, qualityNote || "生成视频稿或视频后自动评估")}
     ${statusRow("封面", image.path ? "已生成" : "未生成", image.provider || "provider 未记录")}
     ${statusRow("视频", video.path ? "已生成" : "未生成", video.path || "等待生成")}
     ${statusRow("成本", costSummary(video, usage), "只统计已写回的 provider")}
     ${statusRow("发布包", draft.platform_packages ? "已记录" : "待生成", "当前以本地发布包为主")}
+    ${renderQualityChecks(quality)}
     ${errors.length ? `<div class="status-errors">${errors.map(([label, text]) => `<p><strong>${escapeHtml(label)}：</strong>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
   `;
+}
+
+function renderQualityChecks(quality) {
+  const checks = quality.checks || [];
+  if (!checks.length) return "";
+  const items = checks
+    .filter((item) => item.status !== "pass")
+    .slice(0, 4)
+    .map((item) => `<p class="quality-check ${escapeHtml(item.status)}"><strong>${escapeHtml(item.name)}：</strong>${escapeHtml(item.message)}</p>`)
+    .join("");
+  return items ? `<div class="quality-checks">${items}</div>` : "";
 }
 
 function statusRow(title, value, note) {
@@ -446,8 +465,11 @@ function styleLabel(value) {
 }
 
 function costSummary(video, usage) {
+  if (video.estimated_total_cost_cny) {
+    return `合计约 ${video.estimated_total_cost_cny} 元`;
+  }
   const parts = [];
-  if (usage) parts.push(`图搜约 ${usage.estimated_cost_cny || 0} 元`);
+  if (usage) parts.push(`视觉约 ${usage.estimated_cost_cny || 0} 元`);
   if (video.tts_estimated_cost_cny) parts.push(`TTS 约 ${video.tts_estimated_cost_cny} 元`);
   return parts.length ? parts.join(" / ") : "暂无记录";
 }

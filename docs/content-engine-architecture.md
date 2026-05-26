@@ -74,11 +74,41 @@ Web 只做审核、编辑、触发和预览，不做复杂业务判断。
 - 页面加载、列表刷新、查看草稿不能触发付费 API。
 - `--dry-run` 不能调用 LLM、图片、TTS 或视频素材付费接口。
 - 手动“生成今日热点”会调用 LLM，应在 UI 上显示状态，失败不能清空当前页面。
-- 视频素材搜索必须尊重 `video_generation.max_tencent_wimgs_calls_per_video`，默认最多 2 次。
-- 腾讯 WIMGS 费用按当前估算：1000 次 60 元，约 0.06 元/次；每次生成视频要写回估算成本。
+- 视频视觉素材必须尊重 provider 额度。即梦/火山方舟默认 `max_jimeng_calls_per_video: 1`，每张按 `jimeng_unit_cost_cny` 记录；腾讯 WIMGS 必须尊重 `max_tencent_wimgs_calls_per_video`。
+- 腾讯 WIMGS 费用按当前估算：1000 次 60 元，约 0.06 元/次；即梦/火山方舟当前按 0.25 元/张估算。每次生成视频都要写回估算成本和额度消耗。
 - 调试流程时优先使用零成本配置：`image_providers: []`、`max_tencent_wimgs_calls_per_video: 0`。
 - 面向发布时不刻意追求免费。素材、TTS、图片和视频 provider 应以“质量达标 + 成本可控 + ROI 可复盘”为准。
 - 免费源、本地源、低价源和高质量付费源都应通过 provider 层接入，允许 A/B 对比质量、成本和效果。
+
+### 付费 Provider 接入 SOP
+
+新增或切换付费 provider 时，先让用户确认以下信息，不要直接试错：
+
+- provider 名称、控制台产品和官方 API 类型。
+- model id、endpoint、region、鉴权环境变量。
+- 单价、剩余额度、本轮允许消耗的最大次数。
+- 请求尺寸、输出格式、是否带水印、失败是否允许 fallback。
+- 是否允许本轮做一次真实付费 smoke test。
+
+执行顺序固定为：
+
+1. 零成本校验：确认配置、环境变量、model id、endpoint、尺寸约束，不生成资产。
+2. 一次付费烟测：最多 1 次 provider 调用，输出摘要和成本。
+3. 成功后才进入视频合成或批量生成。
+
+即梦/火山方舟当前经验：
+
+- 可用模型：`doubao-seedream-4-5-251128`。
+- 9:16 源图尺寸使用 `1440x2560`，因为该模型要求图片尺寸至少 3686400 像素。
+- 默认 `max_jimeng_calls_per_video: 1`，同一张图可在整条视频里复用，避免每个分镜都烧 0.25 元。
+- 生成后要写回 `jimeng_calls`、`jimeng_estimated_cost_cny`、`jimeng_quota_used_after`、`jimeng_quota_total`。
+
+### 低 Token 排障规范
+
+- 不把完整 `generated_video`、`background_attempts`、长 prompt、签名图片 URL 粘到对话里。
+- provider 失败只汇报摘要：provider、model、HTTP 状态、错误码、错误短句、request id、估算成本。
+- 先看单个草稿和首个错误，不遍历全量输出目录。
+- 需要查看 UI 时才使用浏览器；只启动服务和给链接时不必打开浏览器。
 
 ## 质量规范
 
@@ -146,14 +176,23 @@ python3 -m xhs_hotspot_poster --serve
 
 ## 相关规范
 
+- **实施路线图（质量 / 多平台 / 引入源 / 运营）**：`docs/architecture-quality-roadmap.md`
 - 产品北极星：`docs/business-goal-low-cost-content-ops.md`
 - UI 工作台改造：`docs/dashboard-redesign-spec.md`
 - 本地 Codex skill：`/Users/zhangmiao/.codex/skills/hotspot-content-engine`
 
 ## 演进路线
 
-1. 稳定架构和规范：明确 Python/Node/Web 边界，沉淀 skill 与验证脚本。
-2. 重做 Web 工作台：改成更清晰的审核流，修复视觉层级和交互反馈。
-3. 提升视频质量：接入专业 TTS、改良分镜模板、优化图片评分和素材授权标注。
-4. 多平台适配：从同一份内容资产导出小红书、公众号、抖音不同发布包。
-5. 自动发布：只在有合规 API 或用户授权的情况下接入，默认保持人工审核。
+详细分阶段任务见 `docs/architecture-quality-roadmap.md`。摘要：
+
+1. **阶段 A**：视频可发布质量（LLM 口播、腾讯云 TTS、配图评分、质量门禁）。
+2. **阶段 B**：图文与 `content_brief`、封面 publish 档。
+3. **阶段 C**：多平台 `platform_packages`（小红书、视频号、抖音、今日头条）与 `performance`。
+4. **阶段 D**：X / YouTube 参考引入（`ingestion`、`source_references`，参考改写非搬运）。
+5. **阶段 E**：半自动运营（审核队列、内容日历、合规 Publisher Adapter）。
+
+基础能力（与上序并行或已完成部分）：
+
+- 稳定 Python/Node/Web 边界与 skill 验证脚本。
+- Web 工作台审核流（见 dashboard-redesign-spec）。
+- 默认人工审核；有合规 API 时才扩展自动发布。

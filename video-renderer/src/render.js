@@ -42,7 +42,7 @@ async function main() {
   const postPath = path.resolve(PROJECT_ROOT, args.post);
   const configPath = path.resolve(PROJECT_ROOT, args.config || "config.json");
   const post = JSON.parse(await readFile(postPath, "utf8"));
-  const config = JSON.parse(await readFile(configPath, "utf8"));
+  const config = applyQualityProfile(JSON.parse(await readFile(configPath, "utf8")));
   const videoConfig = config.video_generation || {};
   const outputDir = path.join(path.dirname(postPath), "assets");
   await mkdir(outputDir, { recursive: true });
@@ -92,7 +92,13 @@ async function main() {
     outputPath,
     workDir: outputDir,
     fps: Number.parseInt(videoConfig.fps || 30, 10),
+    subtitlePath,
+    burnSubtitles: Boolean(videoConfig.burn_subtitles),
   });
+
+  const imageUsage = summarizeImageSearchUsage(plan.scenes);
+  const ttsCost = Number(tts.estimatedCostCny || 0);
+  const imageCost = Number(imageUsage.estimated_cost_cny || 0);
 
   post.video_plan = plan;
   post.generated_video = {
@@ -108,14 +114,16 @@ async function main() {
     voice_codec: tts.codec,
     voice_character_count: tts.characterCount,
     voice_rate: videoConfig.voice_rate || 170,
-    tts_estimated_cost_cny: tts.estimatedCostCny || 0,
+    tts_estimated_cost_cny: ttsCost,
+    estimated_total_cost_cny: roundNumber(ttsCost + imageCost),
+    quality_tier: config.effective_quality_tier || config.quality_tier || "standard",
     fallback_from_voice_name: tts.fallbackFrom || undefined,
     script_path: relativeOutputPath(scriptPath),
     subtitle_path: relativeOutputPath(subtitlePath),
     source_assets: cards.flatMap((card) => [relativeOutputPath(card.svgPath), relativeOutputPath(card.imagePath)]),
     background_sources: plan.scenes.map((scene) => scene.backgroundImageSource).filter(Boolean),
     background_attempts: plan.scenes.flatMap((scene) => scene.backgroundImageAttempts || []),
-    image_search_usage: summarizeImageSearchUsage(plan.scenes),
+    image_search_usage: imageUsage,
     generated_at: new Date().toISOString().slice(0, 19),
   };
   delete post.video_generation_error;
@@ -163,7 +171,15 @@ function firstTitle(post) {
 function summarizeImageSearchUsage(scenes) {
   const usage = scenes.reduce((latest, scene) => scene.imageSearchUsage || latest, {});
   return {
+    jimeng_calls: usage.jimengCalls || 0,
+    jimeng_unit_cost_cny: usage.jimengUnitCostCny || 0.25,
+    jimeng_estimated_cost_cny: usage.jimengEstimatedCostCny || 0,
+    jimeng_quota_used_before: usage.jimengQuotaUsed || 0,
+    jimeng_quota_used_after: (usage.jimengQuotaUsed || 0) + (usage.jimengCalls || 0),
+    jimeng_quota_total: usage.jimengQuotaTotal || 0,
+    max_jimeng_calls_per_video: usage.maxJimengCalls || 0,
     tencent_wimgs_calls: usage.tencentWimgsCalls || 0,
+    tencent_wimgs_estimated_cost_cny: usage.tencentEstimatedCostCny || 0,
     estimated_cost_cny: usage.estimatedCostCny || 0,
     unit_cost_cny: 0.06,
     max_tencent_wimgs_calls_per_video: usage.maxTencentWimgsCalls || 0,
@@ -173,4 +189,22 @@ function summarizeImageSearchUsage(scenes) {
 function relativeOutputPath(filePath) {
   const outputRoot = path.join(PROJECT_ROOT, "output");
   return path.relative(outputRoot, path.resolve(filePath)).replaceAll(path.sep, "/");
+}
+
+function applyQualityProfile(config) {
+  const tier = config.quality_tier || "standard";
+  const profiles = config.quality_profiles || {};
+  const profile = profiles[tier] || {};
+  return {
+    ...config,
+    effective_quality_tier: tier,
+    image_generation: {
+      ...(config.image_generation || {}),
+      ...(profile.image_generation || {}),
+    },
+    video_generation: {
+      ...(config.video_generation || {}),
+      ...(profile.video_generation || {}),
+    },
+  };
 }

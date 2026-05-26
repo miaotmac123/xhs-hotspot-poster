@@ -4,6 +4,7 @@ This repo is a local controlled-cost automated content operations system. It sta
 
 ## Start Here
 
+- Read `docs/architecture-quality-roadmap.md` before implementing quality upgrades, multi-platform packages, X/YouTube ingestion, or ops automation. It is the canonical implementation roadmap (phases A–E).
 - Read `docs/content-engine-architecture.md` before changing architecture, video, image providers, UI behavior, generation cost, or data model.
 - Read `docs/business-goal-low-cost-content-ops.md` before changing product direction, platform strategy, monetization assumptions, or data model.
 - Read `docs/dashboard-redesign-spec.md` before changing the Web dashboard layout or interactions.
@@ -24,11 +25,25 @@ Do not load every skill by default. Load a skill when the task names it or clear
 - Draft JSON files under `output/YYYY-MM-DD/*.json` are the source of truth.
 - Do not delete draft JSON, Markdown drafts, publish packages, or user-uploaded files unless the user explicitly asks.
 
+## Roadmap Status
+
+Planned but not necessarily implemented yet (check `docs/architecture-quality-roadmap.md` progress checkboxes):
+
+- Phase A: LLM video script, publish-tier TTS, image scoring, quality gate
+- Phase B: `content_brief`, cover publish tier
+- Phase C: `platform_packages` for 小红书 / 视频号 / 抖音 / 今日头条
+- Phase D: X/YouTube reference ingestion (`source_references`, rewrite-only)
+- Phase E: semi-auto ops (review queue, calendar, publisher adapters)
+
 ## Important Paths
 
+- `docs/architecture-quality-roadmap.md`: quality and multi-platform implementation roadmap.
 - `xhs_hotspot_poster/cli.py`: command entry point.
 - `xhs_hotspot_poster/trends.py`: hotspot fetching.
 - `xhs_hotspot_poster/generator.py`: LLM prompt/schema/fallback logic.
+- `xhs_hotspot_poster/video_script.py`: LLM video voiceover seed generation.
+- `xhs_hotspot_poster/quality_gate.py`: publish readiness checks and `quality_report`.
+- `xhs_hotspot_poster/quality_config.py`: merges `quality_profiles` by `quality_tier`.
 - `xhs_hotspot_poster/images.py`: cover/image generation.
 - `xhs_hotspot_poster/web.py`: local dashboard API and asset serving.
 - `xhs_hotspot_poster/video_bridge.py`: thin Python-to-Node bridge.
@@ -42,13 +57,23 @@ Do not load every skill by default. Load a skill when the task names it or clear
 ## Cost And Quality Rules
 
 - Do not run paid or quota-bound providers unless the user asks.
+- Before any new paid provider integration or paid smoke test, stop and confirm: provider, model id, endpoint, unit cost, maximum calls for this run, fallback policy, and whether a real paid call is allowed.
 - `python3 -m xhs_hotspot_poster --once` can call the LLM.
 - Web “生成今日热点” can call the LLM.
 - OpenAI image generation can cost money.
 - Tencent WIMGS can cost money; current estimate is about 0.06 RMB per image-search call.
-- Full video generation may call Tencent WIMGS depending on config.
+- Full video generation may call Tencent WIMGS or Jimeng/Volcengine depending on config.
+- Jimeng/Volcengine image generation uses Ark image models. Current known working model is `doubao-seedream-4-5-251128`; size must be at least 3686400 pixels, so use `1440x2560` for 9:16 source images and downscale in video.
 - Prefer `--dry-run`, `node --check`, and zero-cost video configs for code verification.
 - Do not confuse low cost with no cost. For publishable output, choose providers by quality, bounded cost, and measurable ROI.
+
+## Token Hygiene
+
+- Use `rg` to locate relevant functions before opening whole files.
+- Avoid printing full draft JSON, generated video JSON, provider prompts, signed image URLs, or full `background_attempts` in chat. Summarize provider, model, status, error code, request id, call count, and estimated cost.
+- For paid provider failures, inspect the first error only unless the user asks for full logs.
+- Browser verification is optional. If the user only needs a URL, start the server and provide the URL. Use Browser only for UI verification, screenshots, or user-visible interaction.
+- Prefer one zero-cost validation, then one bounded paid smoke test, then ask before scaling to multiple assets.
 
 ## Low-Cost Verification
 

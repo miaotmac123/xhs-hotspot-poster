@@ -2,7 +2,7 @@
 
 每日基于热点生成小红书帖子草稿的本地程序。
 
-> 当前项目正在从“小红书草稿工具”升级为“热点内容生成引擎”。视频生成核心已放在 Node.js 的 `video-renderer/`，后续会逐步支持公众号、抖音等平台适配。架构说明见 `docs/content-engine-architecture.md`。
+> 当前项目正在从“小红书草稿工具”升级为“热点内容生成引擎”。视频生成核心已放在 Node.js 的 `video-renderer/`，后续会逐步支持小红书、视频号、抖音、今日头条等平台适配。**质量与多平台实施路线图**见 `docs/architecture-quality-roadmap.md`；架构规范见 `docs/content-engine-architecture.md`。
 > 
 > 为了减少后续沟通和 token 消耗，项目维护规范已沉淀为本地 Codex skill：`/Users/zhangmiao/.codex/skills/hotspot-content-engine`。后续让 Codex 改这个项目时，可以直接提到 `hotspot-content-engine`。
 >
@@ -95,7 +95,7 @@ node video-renderer/src/render.js \
   --config config.json
 ```
 
-第一版不会抓取 YouTube，也不会调用 AI 视频模型。它会把草稿重写成视频专用的分析口播稿，按关键词选择可视化方式，并按 `video_generation.image_providers` 的顺序检索图片源。默认顺序是腾讯云 WIMGS、Pexels、Pixabay、Wikimedia；未配置对应密钥时会自动跳过。随后调用 macOS `say` 生成中文配音，再用 `ffmpeg` 合成 MP4。生成结果会写回草稿 JSON 的 `video_plan` 和 `generated_video` 字段，并额外导出 `.srt` 字幕文件。
+第一版不会抓取 YouTube，也不会调用 AI 视频模型。它会把草稿重写成视频专用的分析口播稿，按关键词选择可视化方式，并按 `video_generation.image_providers` 的顺序检索或生成图片源。默认优先使用即梦/火山方舟文生图，再回退到 Pexels、Pixabay、Wikimedia、腾讯云 WIMGS；未配置对应密钥时会自动跳过。即梦默认每条视频最多生成 1 张，按 0.25 元/张写回成本和额度；腾讯 WIMGS 默认最多 1 次，按 0.06 元/次估算。随后调用腾讯云 TTS 或本机语音生成配音，再用 `ffmpeg` 合成 MP4。生成结果会写回草稿 JSON 的 `video_plan` 和 `generated_video` 字段，并额外导出 `.srt` 字幕文件。
 
 ## 可视化查看
 

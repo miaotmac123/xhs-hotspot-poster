@@ -15,7 +15,9 @@ from urllib.parse import unquote, urlparse
 from .config import AppConfig, PROJECT_ROOT
 from .images import attach_uploaded_image_to_post, generate_image_for_post, generate_local_cover_for_post, generate_openai_image_for_post
 from .openai_client import OpenAIError
+from .quality_gate import evaluate_post
 from .video_bridge import VideoGenerationError, generate_local_video_for_post
+from .video_script import generate_video_script_seed
 
 
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -36,6 +38,12 @@ def normalize_video_style(value: object) -> str:
 
 def datetime_now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def persist_draft(path: Path, post: dict[str, object], config: AppConfig) -> dict[str, object]:
+    post["quality_report"] = evaluate_post(post, config)
+    path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+    return post
 
 
 def list_drafts(output_dir: Path, limit: int = 10) -> list[dict[str, object]]:
@@ -184,7 +192,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not path or path.suffix != ".json" or not path.exists():
             self.send_error(404)
             return
-        self.send_json(json.loads(path.read_text(encoding="utf-8")))
+        post = json.loads(path.read_text(encoding="utf-8"))
+        post = persist_draft(path, post, self.config)
+        self.send_json(post)
 
     def generate_draft_image(self, draft_id: str, provider: str | None = None) -> None:
         path = self.resolve_output_path(draft_id)
@@ -250,10 +260,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             result = generate_local_video_for_post(self.config, path)
             post = json.loads(path.read_text(encoding="utf-8"))
+            post = persist_draft(path, post, self.config)
         except VideoGenerationError as exc:
             post = json.loads(path.read_text(encoding="utf-8"))
             post["video_generation_error"] = str(exc)[:2000]
-            path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+            post = persist_draft(path, post, self.config)
             self.send_json({"ok": False, "error": str(exc), "draft": post})
             return
         self.send_json({"ok": True, "result": result, "draft": post})
@@ -264,13 +275,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         self.update_video_style_from_body(path)
+        post = json.loads(path.read_text(encoding="utf-8"))
+        seed = generate_video_script_seed(self.config, post)
+        post["video_script_seed"] = seed
+        if seed.get("generation_error"):
+            post["video_script_generation_error"] = str(seed["generation_error"])[:500]
+        else:
+            post.pop("video_script_generation_error", None)
+        path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
         try:
             result = generate_local_video_for_post(self.config, path, plan_only=True, fresh=True)
             post = json.loads(path.read_text(encoding="utf-8"))
+            post = persist_draft(path, post, self.config)
         except VideoGenerationError as exc:
             post = json.loads(path.read_text(encoding="utf-8"))
             post["video_generation_error"] = str(exc)[:2000]
-            path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+            post = persist_draft(path, post, self.config)
             self.send_json({"ok": False, "error": str(exc), "draft": post})
             return
         self.send_json({"ok": True, "result": result, "draft": post})
@@ -296,7 +316,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         post["video_plan"]["stylePreset"] = style_preset
         post["video_style_preset"] = style_preset
         post["video_plan"]["edited_at"] = datetime_now()
-        path.write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+        post = persist_draft(path, post, self.config)
         self.send_json({"ok": True, "draft": post})
 
     def update_video_style_from_body(self, path: Path) -> None:

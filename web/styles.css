@@ -433,6 +433,22 @@ input[type="search"] {
   margin-top: 8px;
 }
 
+.quality-checks {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 7px;
+  background: #f7f3ee;
+  line-height: 1.45;
+}
+
+.quality-check.warn {
+  color: var(--amber);
+}
+
+.quality-check.fail {
+  color: #a93a33;
+}
+
 .block-title,
 .content-block {
   margin-top: 24px;

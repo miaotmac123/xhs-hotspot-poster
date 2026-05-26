@@ -2,6 +2,55 @@ const DEFAULT_DURATION_SECONDS = 45;
 
 export function buildVideoPlan(post, config = {}) {
   const videoConfig = config.video_generation || {};
+  const useLlm = videoConfig.use_llm_video_script !== false;
+  const seed = post.video_script_seed;
+  if (useLlm && seed?.voiceover_lines?.length) {
+    return buildVideoPlanFromSeed(post, config, seed);
+  }
+  return buildRuleBasedVideoPlan(post, config);
+}
+
+function buildVideoPlanFromSeed(post, config, seed) {
+  const videoConfig = config.video_generation || {};
+  const stylePreset = normalizeStylePreset(post.video_style_preset || videoConfig.style_preset || "xiaohongshu");
+  const targetDuration = toPositiveInt(videoConfig.duration_seconds, defaultDurationForStyle(stylePreset));
+  const title = firstText(post.title_options) || post.selected_topic || "今日热点";
+  const topic = cleanText(post.selected_topic || title);
+  const angle = cleanText(post.angle || "");
+  const hashtags = Array.isArray(post.hashtags) ? post.hashtags.slice(0, 4) : [];
+  const domain = inferDomain(`${topic} ${angle} ${hashtags.join(" ")}`);
+  const visualKeywords = extractVisualKeywords({ topic, angle, body: post.body || "", hashtags, domain });
+  const visualQuery = visualQueryForDomain(domain, visualKeywords);
+  const lines = (seed.voiceover_lines || []).map((line) => cleanText(line)).filter(Boolean);
+  const hints = Array.isArray(seed.scene_hints) ? seed.scene_hints : [];
+  const sceneCount = Math.max(4, Math.min(8, hints.length || Math.ceil(lines.length / 2)));
+  const perScene = Math.max(1, Math.ceil(lines.length / sceneCount));
+  const sceneInputs = [];
+  for (let index = 0; index < sceneCount; index += 1) {
+    const chunk = lines.slice(index * perScene, (index + 1) * perScene);
+    const narration = normalizeNarration(chunk.join("。") || lines[index] || topic);
+    const hint = hints[index] || {};
+    sceneInputs.push({
+      title: cleanText(hint.title) || `要点 ${index + 1}`,
+      subtitle: cleanText(hint.subtitle) || shortLine(narration, 34),
+      narration,
+      keywords: normalizeKeywords(hint.keywords || visualKeywords.zh),
+      visualQuery: sceneQuery(visualQuery, visualKeywords, [topic, domainLabels[domain] || "热点"], [domainEnglishLabels[domain] || "news"]),
+      visualType: index === sceneCount - 1 && /风险|核实|建议|投资|购房/.test(narration) ? visualTypeForDomain(domain) : visualTypeForDomain(domain),
+      premiumVisual: index === 0 || index === sceneCount - 1,
+    });
+  }
+  return finalizeVideoPlan({
+    provider: "llm_seed_node_layout_v1",
+    stylePreset,
+    targetDuration,
+    sceneInputs,
+    seedModel: seed.model || "",
+  });
+}
+
+function buildRuleBasedVideoPlan(post, config = {}) {
+  const videoConfig = config.video_generation || {};
   const stylePreset = normalizeStylePreset(post.video_style_preset || videoConfig.style_preset || "xiaohongshu");
   const targetDuration = toPositiveInt(videoConfig.duration_seconds, defaultDurationForStyle(stylePreset));
   const title = firstText(post.title_options) || post.selected_topic || "今日热点";
@@ -14,26 +63,40 @@ export function buildVideoPlan(post, config = {}) {
   const visualKeywords = extractVisualKeywords({ topic, angle, body: post.body || "", hashtags, domain });
   const visualQuery = visualQueryForDomain(domain, visualKeywords);
 
-  const sceneInputs = buildAnalysisScenes({ title, topic, angle, domain, facts, risks, hashtags, visualQuery, visualKeywords });
+  const sceneInputs = buildAnalysisScenes({ title, topic, angle, domain, facts, risks, hashtags, visualQuery, visualKeywords }).map((scene, index, list) => ({
+    ...scene,
+    premiumVisual: index === 0 || index === list.length - 1,
+  }));
 
+  return finalizeVideoPlan({
+    provider: "rule_based_node_analysis_v2",
+    stylePreset,
+    targetDuration,
+    sceneInputs: sceneInputs.slice(0, 9),
+  });
+}
+
+function finalizeVideoPlan({ provider, stylePreset, targetDuration, sceneInputs, seedModel = "" }) {
   const scenes = sceneInputs.slice(0, 9);
-  const sceneDuration = Math.max(4, Math.round(targetDuration / scenes.length));
+  const sceneDuration = Math.max(4, Math.round(targetDuration / Math.max(1, scenes.length)));
   const timedScenes = scenes.map((scene, index) => ({
     id: `scene-${String(index + 1).padStart(2, "0")}`,
     title: scene.title,
     subtitle: scene.subtitle,
     narration: normalizeNarration(scene.narration || scene.subtitle),
     keywords: scene.keywords,
-    visualQuery: scene.visualQuery || visualQuery,
+    visualQuery: scene.visualQuery,
     visualType: scene.visualType || "photo",
+    premiumVisual: Boolean(scene.premiumVisual),
     durationSeconds: sceneDuration,
   }));
   const totalDuration = timedScenes.reduce((sum, scene) => sum + scene.durationSeconds, 0);
   const voiceover = timedScenes.map((scene) => scene.narration).join("\n");
   let cursor = 0;
   const subtitleSegments = [];
+  const subtitleMax = subtitleMaxCharsForStyle(stylePreset);
   for (const scene of timedScenes) {
-    const chunks = splitSubtitleChunks(scene.narration);
+    const chunks = splitSubtitleChunks(scene.narration, subtitleMax);
     const chunkDuration = scene.durationSeconds / chunks.length;
     for (const text of chunks) {
       subtitleSegments.push({
@@ -52,14 +115,21 @@ export function buildVideoPlan(post, config = {}) {
   }
 
   return {
-    provider: "rule_based_node_analysis_v2",
+    provider,
     contentType: "hotspot_analysis_video",
     stylePreset,
     durationSeconds: totalDuration,
     voiceover,
     scenes: timedScenes,
     subtitleSegments,
+    script_seed_model: seedModel || undefined,
   };
+}
+
+function subtitleMaxCharsForStyle(stylePreset) {
+  if (stylePreset === "douyin") return 14;
+  if (stylePreset === "shipinhao") return 20;
+  return 18;
 }
 
 export function applyVoiceoverToPlan(plan, voiceover) {
@@ -106,9 +176,10 @@ export function videoScriptText(plan) {
 
 export function retimePlanToAudioDuration(plan, audioDurationSeconds) {
   const duration = Math.max(1, Number(audioDurationSeconds) || Number(plan.durationSeconds) || DEFAULT_DURATION_SECONDS);
+  const subtitleMax = subtitleMaxCharsForStyle(plan.stylePreset || "xiaohongshu");
   const scenes = plan.scenes || [];
   const sceneChunks = scenes.map((scene) => {
-    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "");
+    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "", subtitleMax);
     return {
       scene,
       chunks: chunks.length ? chunks : [scene.subtitle || scene.title || "今日热点"],
@@ -156,8 +227,9 @@ export function retimePlanToAudioDuration(plan, audioDurationSeconds) {
 }
 
 export function voiceoverSegmentsForPlan(plan) {
+  const subtitleMax = subtitleMaxCharsForStyle(plan.stylePreset || "xiaohongshu");
   return (plan.scenes || []).flatMap((scene) => {
-    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "");
+    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "", subtitleMax);
     return (chunks.length ? chunks : [scene.subtitle || scene.title || "今日热点"]).map((text) => ({
       sceneId: scene.id,
       text,
@@ -166,12 +238,13 @@ export function voiceoverSegmentsForPlan(plan) {
 }
 
 export function retimePlanToSegmentDurations(plan, segmentDurations) {
+  const subtitleMax = subtitleMaxCharsForStyle(plan.stylePreset || "xiaohongshu");
   let cursor = 0;
   let segmentIndex = 0;
   const subtitleSegments = [];
   const nextScenes = (plan.scenes || []).map((scene) => {
     const sceneStart = cursor;
-    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "");
+    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "", subtitleMax);
     const texts = chunks.length ? chunks : [scene.subtitle || scene.title || "今日热点"];
     for (const text of texts) {
       const duration = Math.max(0.45, Number(segmentDurations[segmentIndex]) || 1);
@@ -203,10 +276,11 @@ export function retimePlanToSegmentDurations(plan, segmentDurations) {
 }
 
 function retimeSubtitles(plan) {
+  const subtitleMax = subtitleMaxCharsForStyle(plan.stylePreset || "xiaohongshu");
   let cursor = 0;
   const subtitleSegments = [];
   for (const scene of plan.scenes || []) {
-    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "");
+    const chunks = splitSubtitleChunks(scene.narration || scene.subtitle || "", subtitleMax);
     const duration = Number(scene.durationSeconds || 4);
     const chunkDuration = duration / Math.max(1, chunks.length);
     for (const text of chunks) {
@@ -317,8 +391,8 @@ function normalizeNarration(text) {
     .join("。");
 }
 
-function splitSubtitleChunks(text) {
-  const chunks = splitSentences(text).flatMap((sentence) => splitLongSentence(sentence, 18));
+function splitSubtitleChunks(text, maxLength = 18) {
+  const chunks = splitSentences(text).flatMap((sentence) => splitLongSentence(sentence, maxLength));
   return chunks.length ? chunks : [cleanText(text)];
 }
 

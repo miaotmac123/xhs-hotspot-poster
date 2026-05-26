@@ -154,3 +154,5 @@
 1. Web 工作台重构：清晰审核、编辑、生成、发布包流程。
 2. 视频质量提升：文稿、字幕、TTS、配图先达到可发布水平。
 3. 成本和效果记录：每条内容知道花了多少钱、发到哪里、效果如何。
+
+**分阶段技术路线**（含今日头条、X/YouTube 参考引入、半自动运营）见 [`docs/architecture-quality-roadmap.md`](./architecture-quality-roadmap.md)。

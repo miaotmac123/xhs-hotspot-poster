@@ -79,7 +79,6 @@ async function renameIfPossible(from, to) {
 function buildSceneSvg(scene, index, total, backgroundDataUri, stylePreset) {
   const [bg, ink, accent, secondary, paper] = PALETTES[index % PALETTES.length];
   const style = styleSettings(stylePreset);
-  const titleLines = wrapCjk(scene.title, 11, 2);
   const subtitleLines = wrapCjk(scene.subtitle || scene.narration, style.subtitleWidth, style.subtitleLines);
   const background = backgroundDataUri
     ? `<image href="${backgroundDataUri}" x="0" y="0" width="1080" height="1920" preserveAspectRatio="xMidYMid slice"/>
@@ -108,13 +107,9 @@ function buildSceneSvg(scene, index, total, backgroundDataUri, stylePreset) {
   </defs>
   ${background}
   <rect width="1080" height="1920" fill="url(#grid)" opacity="${backgroundDataUri ? "0.02" : "1"}"/>
-  <text x="82" y="124" fill="#000000" font-size="26" font-weight="760" opacity="0.34" font-family="${fontFamily()}">热点分析</text>
-  <text x="80" y="122" fill="#ffffff" font-size="26" font-weight="760" opacity="0.82" font-family="${fontFamily()}">热点分析</text>
   <text x="1002" y="124" fill="#000000" font-size="24" font-weight="760" text-anchor="end" opacity="0.30" font-family="${fontFamily()}">${index + 1}/${total}</text>
   <text x="1000" y="122" fill="#ffffff" font-size="24" font-weight="760" text-anchor="end" opacity="0.72" font-family="${fontFamily()}">${index + 1}/${total}</text>
-  <rect x="76" y="456" width="10" height="154" rx="5" fill="${accent}" opacity="0.95"/>
-  ${makeTextLines(titleLines, 108, style.titleY, 104, { fill: backgroundDataUri ? "#ffffff" : ink, fontSize: style.titleFontSize, fontWeight: 900, shadow: Boolean(backgroundDataUri) })}
-  <rect x="${style.subtitleBoxX}" y="${style.subtitleBoxY}" width="${style.subtitleBoxWidth}" height="${style.subtitleBoxHeight}" rx="22" fill="url(#subtitleShade)" opacity="${backgroundDataUri ? "0.86" : "0.94"}"/>
+  <rect x="${style.subtitleBoxX}" y="${style.subtitleBoxY}" width="${style.subtitleBoxWidth}" height="${style.subtitleBoxHeight}" rx="22" fill="url(#subtitleShade)" opacity="${backgroundDataUri ? "0.72" : "0.94"}"/>
   ${makeTextLines(subtitleLines, style.subtitleX, style.subtitleY, style.subtitleLineHeight, { fill: "#ffffff", fontSize: style.subtitleFontSize, fontWeight: 780, shadow: true })}
 </svg>`;
 }
@@ -127,13 +122,13 @@ function styleSettings(stylePreset) {
       subtitleWidth: 18,
       subtitleLines: 3,
       subtitleBoxX: 56,
-      subtitleBoxY: 1306,
+      subtitleBoxY: 1516,
       subtitleBoxWidth: 968,
-      subtitleBoxHeight: 286,
+      subtitleBoxHeight: 206,
       subtitleX: 102,
-      subtitleY: 1410,
+      subtitleY: 1594,
       subtitleFontSize: 48,
-      subtitleLineHeight: 66,
+      subtitleLineHeight: 58,
     };
   }
   if (stylePreset === "shipinhao") {
@@ -143,13 +138,13 @@ function styleSettings(stylePreset) {
       subtitleWidth: 23,
       subtitleLines: 3,
       subtitleBoxX: 72,
-      subtitleBoxY: 1346,
+      subtitleBoxY: 1526,
       subtitleBoxWidth: 936,
-      subtitleBoxHeight: 236,
+      subtitleBoxHeight: 188,
       subtitleX: 110,
-      subtitleY: 1434,
+      subtitleY: 1598,
       subtitleFontSize: 40,
-      subtitleLineHeight: 56,
+      subtitleLineHeight: 50,
     };
   }
   return {
@@ -158,13 +153,13 @@ function styleSettings(stylePreset) {
     subtitleWidth: 22,
     subtitleLines: 3,
     subtitleBoxX: 72,
-    subtitleBoxY: 1332,
+    subtitleBoxY: 1528,
     subtitleBoxWidth: 936,
-    subtitleBoxHeight: 254,
+    subtitleBoxHeight: 190,
     subtitleX: 110,
-    subtitleY: 1426,
+    subtitleY: 1600,
     subtitleFontSize: 42,
-    subtitleLineHeight: 58,
+    subtitleLineHeight: 50,
   };
 }
 
