@@ -1,4 +1,5 @@
 let drafts = [];
+let radarCandidates = [];
 let selectedDraft = null;
 let activeTab = "draft";
 
@@ -16,6 +17,12 @@ const xPasteAuthor = document.querySelector("#xPasteAuthor");
 const xPasteUrl = document.querySelector("#xPasteUrl");
 const xPasteImportBtn = document.querySelector("#xPasteImportBtn");
 const xPasteStatus = document.querySelector("#xPasteStatus");
+const syncRadarBtn = document.querySelector("#syncRadarBtn");
+const refreshRadarBtn = document.querySelector("#refreshRadarBtn");
+const generateRadarBtn = document.querySelector("#generateRadarBtn");
+const radarKeywordInput = document.querySelector("#radarKeywordInput");
+const radarStatus = document.querySelector("#radarStatus");
+const radarList = document.querySelector("#radarList");
 const refreshOpsBtn = document.querySelector("#refreshOpsBtn");
 const opsStatus = document.querySelector("#opsStatus");
 const opsDetail = document.querySelector("#opsDetail");
@@ -37,6 +44,9 @@ const publishPackageInfo = document.querySelector("#publishPackageInfo");
 document.querySelector("#refreshBtn").addEventListener("click", () => loadDrafts({ keepSelected: true }));
 generateOnceBtn.addEventListener("click", generateDraftsOnce);
 xPasteImportBtn.addEventListener("click", importXPaste);
+syncRadarBtn.addEventListener("click", syncRadarData);
+refreshRadarBtn.addEventListener("click", loadRadarCandidates);
+generateRadarBtn.addEventListener("click", generateFromRadarCandidates);
 refreshOpsBtn.addEventListener("click", loadOpsStatus);
 performanceForm.addEventListener("submit", submitPerformance);
 searchInput.addEventListener("input", renderDraftList);
@@ -51,6 +61,10 @@ autoFillXhsBtn.addEventListener("click", prepareAutoFillXhs);
 
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+});
+
+document.querySelectorAll(".input-tab-button").forEach((button) => {
+  button.addEventListener("click", () => setInputTab(button.dataset.inputTab));
 });
 
 document.querySelectorAll("[data-copy]").forEach((button) => {
@@ -116,6 +130,128 @@ async function importXPaste() {
     xPasteStatus.textContent = `导入失败：${error.message}`;
   } finally {
     setButtonLoading(xPasteImportBtn, false, "忠实本地化导入");
+  }
+}
+
+async function loadRadarCandidates() {
+  radarStatus.classList.remove("hidden");
+  radarStatus.textContent = "正在读取 TrendRadar 候选。";
+  try {
+    const response = await fetch("/api/trendradar/candidates");
+    const result = await response.json();
+    radarCandidates = result.candidates || [];
+    renderRadarCandidates(result);
+    if (!result.enabled) {
+      radarStatus.textContent = "尚未配置 trendradar_json 源，可先在 config.json 添加后刷新。";
+    } else {
+      radarStatus.textContent = radarCandidates.length ? `已读取 ${radarCandidates.length} 条候选。` : "暂无候选，检查 TrendRadar 输出文件或筛选条件。";
+    }
+  } catch (error) {
+    radarStatus.textContent = `读取失败：${error.message}`;
+  }
+}
+
+async function syncRadarData() {
+  const platforms = selectedRadarSources();
+  const keywords = radarKeywordInput.value.trim();
+  if (!platforms.length) {
+    radarStatus.classList.remove("hidden");
+    radarStatus.textContent = "请至少选择一个来源。";
+    return;
+  }
+  setButtonLoading(syncRadarBtn, true, "同步中...");
+  radarStatus.classList.remove("hidden");
+  radarStatus.textContent = keywords ? `正在同步并过滤：${keywords}` : "正在同步所选来源的最新数据。";
+  try {
+    const response = await fetch("/api/trendradar/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platforms, keywords }),
+    });
+    const result = await response.json();
+    radarCandidates = result.candidates || [];
+    renderRadarCandidates({ enabled: true });
+    const summary = result.summary || {};
+    const count = summary.items ?? radarCandidates.length;
+    const failureCount = Array.isArray(summary.failures) ? summary.failures.length : 0;
+    if (!result.ok && !radarCandidates.length) {
+      radarStatus.textContent = result.error || "同步完成，但没有匹配候选。";
+      return;
+    }
+    radarStatus.textContent = `同步完成：${count} 条候选${failureCount ? `，${failureCount} 个来源失败` : ""}。`;
+  } catch (error) {
+    radarStatus.textContent = `同步失败：${error.message}`;
+  } finally {
+    setButtonLoading(syncRadarBtn, false, "同步数据");
+  }
+}
+
+function selectedRadarSources() {
+  return [...document.querySelectorAll("input[name='radarSource']:checked")].map((input) => input.value);
+}
+
+function renderRadarCandidates(result = {}) {
+  radarList.innerHTML = "";
+  if (!radarCandidates.length) {
+    radarList.innerHTML = `<p class="muted">${result.enabled ? "暂无雷达候选。" : "未启用 TrendRadar 源。"}</p>`;
+    return;
+  }
+  radarCandidates.slice(0, 20).forEach((candidate, index) => {
+    const label = document.createElement("label");
+    label.className = "radar-item";
+    const source = candidate.source || "trendradar";
+    const heat = candidate.heat ? ` · ${candidate.heat}` : "";
+    const summary = candidate.summary ? `<p>${escapeHtml(candidate.summary)}</p>` : "";
+    const tags = candidate.tags?.length ? `<div class="radar-tags">${candidate.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : "";
+    const link = candidate.url ? `<a href="${escapeHtml(candidate.url)}" target="_blank" rel="noreferrer">打开</a>` : "";
+    label.innerHTML = `
+      <input type="checkbox" value="${index}" />
+      <span>
+        <strong>${escapeHtml(candidate.title)}</strong>
+        <small>${escapeHtml(source)}${escapeHtml(heat)} ${link}</small>
+        ${summary}
+        ${tags}
+      </span>
+    `;
+    radarList.appendChild(label);
+  });
+}
+
+function selectedRadarCandidates() {
+  return [...radarList.querySelectorAll("input[type='checkbox']:checked")]
+    .map((input) => radarCandidates[Number(input.value)])
+    .filter(Boolean);
+}
+
+async function generateFromRadarCandidates() {
+  const candidates = selectedRadarCandidates();
+  if (!candidates.length) {
+    radarStatus.classList.remove("hidden");
+    radarStatus.textContent = "请先勾选 1 条或多条雷达候选。";
+    return;
+  }
+  setButtonLoading(generateRadarBtn, true, "生成中...");
+  radarStatus.classList.remove("hidden");
+  radarStatus.textContent = "正在基于选中候选生成草稿，只有此步骤会调用写作链路。";
+  try {
+    const response = await fetch("/api/trendradar/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidates }),
+    });
+    const result = await response.json();
+    if (!result.ok) {
+      radarStatus.textContent = result.error || "生成失败，请检查 LLM 配置。";
+      if (result.draft_id) await loadDrafts({ selectId: result.draft_id });
+      return;
+    }
+    radarStatus.textContent = "已生成雷达候选草稿，请在右侧审核来源和内容。";
+    await loadDrafts({ selectId: result.draft_id });
+    setActiveTab("draft");
+  } catch (error) {
+    radarStatus.textContent = `生成失败：${error.message}`;
+  } finally {
+    setButtonLoading(generateRadarBtn, false, "生成选中草稿");
   }
 }
 
@@ -185,11 +321,21 @@ function setActiveTab(tab) {
   });
 }
 
+function setInputTab(tab) {
+  const nextTab = tab || "drafts";
+  document.querySelectorAll(".input-tab-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.inputTab === nextTab);
+  });
+  document.querySelectorAll(".input-tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `input-tab-${nextTab}`);
+  });
+}
+
 function renderDetail(draft) {
   emptyState.classList.add("hidden");
   draftDetail.classList.remove("hidden");
 
-  const originLabel = draft.content_origin === "x_paste" ? "X 粘贴搬运" : "热点生成";
+  const originLabel = draft.content_origin === "x_paste" ? "X 粘贴搬运" : draft.content_origin === "trendradar" ? "TrendRadar 候选" : "热点生成";
   document.querySelector("#dateText").textContent = `${draft.generated_at || ""} · ${draft.model || ""} · ${originLabel}`;
   document.querySelector("#topicText").textContent = draft.selected_topic || "未命名草稿";
   document.querySelector("#coverText").textContent = draft.cover_text || "待补充封面文字";
@@ -272,9 +418,22 @@ function renderWechatAndSource(draft) {
   }
 
   const raw = draft.source_material?.raw_text || "";
-  sourceSection.classList.toggle("hidden", !raw);
+  const references = Array.isArray(draft.source_references) ? draft.source_references : [];
+  sourceSection.classList.toggle("hidden", !raw && !references.length);
   if (raw) {
     document.querySelector("#sourceRawText").textContent = raw;
+  } else if (references.length) {
+    document.querySelector("#sourceRawText").textContent = references
+      .map((item, index) => {
+        const lines = [
+          `${index + 1}. ${item.title || "未命名来源"}`,
+          item.platform ? `来源：${item.platform}` : "",
+          item.url ? `链接：${item.url}` : "",
+          item.summary ? `摘要：${item.summary}` : "",
+        ].filter(Boolean);
+        return lines.join("\n");
+      })
+      .join("\n\n");
   }
 
   const wechatHint = document.querySelector("#wechatPublishHint");
@@ -637,3 +796,4 @@ async function submitPerformance(event) {
 
 loadDrafts();
 loadOpsStatus();
+loadRadarCandidates();

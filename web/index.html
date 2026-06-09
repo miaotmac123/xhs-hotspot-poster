@@ -31,27 +31,75 @@
           </div>
         </div>
 
-        <div class="list-header">
-          <div class="list-title-row">
-            <h2>最新 10 条</h2>
-            <button id="generateOnceBtn" class="copy-button small-button">生成今日热点</button>
-          </div>
-          <div id="latestInfo" class="sidebar-hint">等待刷新</div>
-          <div id="generateOnceStatus" class="sidebar-status hidden"></div>
+        <nav class="input-tabs" aria-label="输入方式">
+          <button class="input-tab-button active" data-input-tab="drafts">草稿</button>
+          <button class="input-tab-button" data-input-tab="radar">雷达</button>
+          <button class="input-tab-button" data-input-tab="paste">X 搬运</button>
+          <button class="input-tab-button" data-input-tab="ops">运营</button>
+        </nav>
 
-          <details class="import-panel" open>
-            <summary>X 粘贴搬运</summary>
-            <p class="import-hint">粘贴推文全文，忠实翻译为小红书 + 公众号两版（不编造事实）。</p>
+        <div class="input-tab-panels">
+          <section id="input-tab-drafts" class="input-tab-panel active">
+            <div class="list-header">
+              <div class="list-title-row">
+                <h2>最新 10 条</h2>
+                <button id="generateOnceBtn" class="copy-button small-button">生成今日热点</button>
+              </div>
+              <div id="latestInfo" class="sidebar-hint">等待刷新</div>
+              <div id="generateOnceStatus" class="sidebar-status hidden"></div>
+              <input id="searchInput" type="search" placeholder="搜索标题、标签或日期" />
+            </div>
+            <div id="draftList" class="draft-list"></div>
+          </section>
+
+          <section id="input-tab-radar" class="input-tab-panel">
+            <div class="panel-head">
+              <h2>TrendRadar 候选</h2>
+              <p class="import-hint">按来源和标签同步数据，再选择候选进入 brief 与草稿生成流程。</p>
+            </div>
+            <div class="filter-block">
+              <span>来源</span>
+              <div class="source-filter-grid">
+                <label><input type="checkbox" name="radarSource" value="weibo" checked /> 微博</label>
+                <label><input type="checkbox" name="radarSource" value="zhihu" checked /> 知乎</label>
+                <label><input type="checkbox" name="radarSource" value="toutiao" checked /> 头条</label>
+                <label><input type="checkbox" name="radarSource" value="baidu" checked /> 百度</label>
+                <label><input type="checkbox" name="radarSource" value="thepaper" /> 澎湃</label>
+                <label><input type="checkbox" name="radarSource" value="cls-hot" /> 财联社</label>
+                <label><input type="checkbox" name="radarSource" value="wallstreetcn-hot" /> 华尔街见闻</label>
+                <label><input type="checkbox" name="radarSource" value="douyin" /> 抖音</label>
+              </div>
+            </div>
+            <label class="filter-field">
+              <span>标签 / 关键词</span>
+              <input id="radarKeywordInput" class="paste-field" type="text" placeholder="AI, 房产, 消费；留空不过滤" />
+            </label>
+            <div class="button-row radar-actions">
+              <button id="syncRadarBtn" class="copy-button small-button">同步数据</button>
+              <button id="refreshRadarBtn" class="copy-button small-button">刷新候选</button>
+              <button id="generateRadarBtn" class="copy-button small-button">生成选中草稿</button>
+            </div>
+            <div id="radarStatus" class="sidebar-status hidden"></div>
+            <div id="radarList" class="radar-list"></div>
+          </section>
+
+          <section id="input-tab-paste" class="input-tab-panel">
+            <div class="panel-head">
+              <h2>X 粘贴搬运</h2>
+              <p class="import-hint">粘贴推文全文，忠实翻译为小红书 + 公众号两版（不编造事实）。</p>
+            </div>
             <textarea id="xPasteInput" class="paste-input" rows="8" placeholder="粘贴 X 推文全文（建议 ≥80 字）"></textarea>
             <input id="xPasteAuthor" class="paste-field" type="text" placeholder="@作者（可选，可自动识别）" />
             <input id="xPasteUrl" class="paste-field" type="url" placeholder="原文链接（可选）" />
             <button id="xPasteImportBtn" class="copy-button small-button full-width">忠实本地化导入</button>
             <div id="xPasteStatus" class="sidebar-status hidden"></div>
-          </details>
+          </section>
 
-          <details class="import-panel ops-panel">
-            <summary>运营 / 队列</summary>
-            <p class="import-hint">查看定时 slot 队列、流水线健康度；录入阅读数据反哺选题。</p>
+          <section id="input-tab-ops" class="input-tab-panel">
+            <div class="panel-head">
+              <h2>运营 / 队列</h2>
+              <p class="import-hint">查看定时 slot 队列、流水线健康度；录入阅读数据反哺选题。</p>
+            </div>
             <button id="refreshOpsBtn" class="copy-button small-button full-width">刷新运营状态</button>
             <div id="opsStatus" class="ops-status"></div>
             <form id="performanceForm" class="performance-form">
@@ -60,12 +108,8 @@
               <button type="submit" class="copy-button small-button full-width">录入当前草稿数据</button>
             </form>
             <div id="perfStatus" class="sidebar-status hidden"></div>
-          </details>
-
-          <input id="searchInput" type="search" placeholder="搜索标题、标签或日期" />
+          </section>
         </div>
-
-        <div id="draftList" class="draft-list"></div>
       </aside>
 
       <section class="preview" aria-label="内容审核工作区">
@@ -129,7 +173,7 @@
 
                 <section id="sourceSection" class="source-section hidden">
                   <details>
-                    <summary>原文依据（搬运）</summary>
+                    <summary>来源依据</summary>
                     <pre id="sourceRawText" class="source-raw"></pre>
                   </details>
                 </section>

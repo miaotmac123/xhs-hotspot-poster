@@ -13,6 +13,9 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from .config import AppConfig, PROJECT_ROOT
+from .content_brief import brief_enabled, generate_content_brief
+from .content_pipeline import run_writing_pipeline
+from .generator import generate_post, generate_template_post
 from .images import (
     ImageGenerationError,
     attach_uploaded_image_to_post,
@@ -27,7 +30,8 @@ from .video_bridge import VideoGenerationError, generate_local_video_for_post
 from .hit_library import record_performance
 from .ops_status import collect_ops_status
 from .repurpose import import_and_repurpose_paste
-from .storage import save_post
+from .storage import render_markdown, save_post
+from .trends import Trend, collect_trendradar_candidates
 from .video_script import generate_video_script_seed
 
 
@@ -103,6 +107,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/ops/status":
             self.send_ops_status(head_only=True)
             return
+        if parsed.path == "/api/trendradar/candidates":
+            self.send_trendradar_candidates(head_only=True)
+            return
         if parsed.path.startswith("/assets/"):
             self.send_output_asset(remove_prefix(parsed.path, "/assets/"), head_only=True)
             return
@@ -115,6 +122,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/ops/status":
             self.send_ops_status()
+            return
+        if parsed.path == "/api/trendradar/candidates":
+            self.send_trendradar_candidates()
             return
         if parsed.path.startswith("/api/drafts/"):
             self.send_draft(remove_prefix(parsed.path, "/api/drafts/"))
@@ -131,6 +141,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/import/x-paste":
             self.import_x_paste()
+            return
+        if parsed.path == "/api/trendradar/generate":
+            self.generate_from_trendradar()
+            return
+        if parsed.path == "/api/trendradar/sync":
+            self.sync_trendradar_bridge()
             return
         if parsed.path == "/api/ops/status":
             self.send_ops_status()
@@ -175,6 +191,64 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def send_ops_status(self, *, head_only: bool = False) -> None:
         status = collect_ops_status(self.config.output_dir)
         self.send_json(status, head_only=head_only)
+
+    def send_trendradar_candidates(self, *, head_only: bool = False) -> None:
+        candidates = collect_trendradar_candidates(self.config.data)
+        self.send_json(
+            {
+                "ok": True,
+                "enabled": any(source.get("type") == "trendradar_json" and source.get("enabled", True) for source in self.config.data.get("trend_sources", [])),
+                "candidates": [trend_to_payload(trend, index) for index, trend in enumerate(candidates)],
+            },
+            head_only=head_only,
+        )
+
+    def sync_trendradar_bridge(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self.send_json({"ok": False, "error": "请求体不是合法 JSON。"})
+            return
+
+        platforms = [str(item).strip() for item in payload.get("platforms", []) if str(item).strip()] if isinstance(payload.get("platforms"), list) else []
+        keywords = normalize_filter_values(payload.get("keywords", ""))
+        command = [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "sync_trendradar_bridge.py"),
+            "--output",
+            str(PROJECT_ROOT / "data" / "trendradar" / "latest.json"),
+        ]
+        for platform in platforms:
+            command.extend(["--platform", platform])
+        for keyword in keywords:
+            command.extend(["--keyword", keyword])
+
+        try:
+            result = subprocess.run(
+                command,
+                cwd=PROJECT_ROOT,
+                check=False,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            self.send_json({"ok": False, "error": "TrendRadar 数据同步超时。", "stdout": exc.stdout or "", "stderr": exc.stderr or ""})
+            return
+
+        summary = parse_json_object(result.stdout)
+        candidates = collect_trendradar_candidates(self.config.data)
+        self.send_json(
+            {
+                "ok": result.returncode == 0,
+                "error": "" if result.returncode == 0 else (result.stderr.strip() or "同步后没有匹配候选。"),
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "summary": summary,
+                "candidates": [trend_to_payload(trend, index) for index, trend in enumerate(candidates)],
+            }
+        )
 
     def record_performance(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -291,6 +365,67 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "latest_draft_id": latest_draft_id,
             "drafts": list_drafts(self.config.output_dir),
         })
+
+    def generate_from_trendradar(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            self.send_json({"ok": False, "error": "请求体不是合法 JSON。"})
+            return
+
+        raw_candidates = payload.get("candidates")
+        if not isinstance(raw_candidates, list) or not raw_candidates:
+            self.send_json({"ok": False, "error": "请先选择至少 1 条雷达候选。"})
+            return
+
+        trends = [trend_from_payload(item) for item in raw_candidates[: self.config.candidate_count] if isinstance(item, dict)]
+        trends = [trend for trend in trends if trend.title.strip()]
+        if not trends:
+            self.send_json({"ok": False, "error": "选中的雷达候选缺少标题。"})
+            return
+
+        brief = None
+        try:
+            if brief_enabled(self.config.data):
+                brief = generate_content_brief(self.config, trends)
+            post = generate_post(self.config, trends, content_brief=brief)
+        except (OpenAIError, ValueError) as exc:
+            post = generate_template_post(self.config, trends, str(exc))
+        else:
+            if brief:
+                post["content_brief"] = brief
+
+        post["content_origin"] = "trendradar"
+        post["source_references"] = [
+            {
+                "platform": remove_prefix(trend.source, "trendradar:"),
+                "title": trend.title,
+                "url": trend.url,
+                "summary": trend.summary,
+                "tags": list(trend.tags),
+                "usage": "topic_seed",
+            }
+            for trend in trends
+        ]
+        try:
+            post = run_writing_pipeline(post, self.config)
+        except OpenAIError as exc:
+            post["writing_pipeline_error"] = str(exc)[:500]
+
+        path = save_post(self.config.output_dir, post)
+        post = persist_draft(path, post, self.config)
+        path.with_suffix(".md").write_text(render_markdown(post), encoding="utf-8")
+        draft_id = path.relative_to(self.config.output_dir).as_posix()
+        self.send_json(
+            {
+                "ok": not bool(post.get("generation_error")),
+                "draft_id": draft_id,
+                "draft": post,
+                "drafts": list_drafts(self.config.output_dir),
+                "error": post.get("generation_error", ""),
+            }
+        )
 
     def send_draft(self, draft_id: str) -> None:
         path = self.resolve_output_path(draft_id)
@@ -589,6 +724,47 @@ def first_title(post: dict[str, object]) -> str:
     if isinstance(titles, list) and titles:
         return str(titles[0])
     return str(post.get("selected_topic", "小红书草稿"))
+
+
+def trend_to_payload(trend: Trend, index: int) -> dict[str, object]:
+    return {
+        "id": f"{index}:{trend.source}:{trend.title}",
+        "title": trend.title,
+        "source": trend.source,
+        "url": trend.url,
+        "heat": trend.heat,
+        "summary": trend.summary,
+        "tags": list(trend.tags),
+    }
+
+
+def trend_from_payload(payload: dict[str, object]) -> Trend:
+    return Trend(
+        title=str(payload.get("title", "")).strip(),
+        source=str(payload.get("source", "trendradar")).strip() or "trendradar",
+        url=str(payload.get("url", "")).strip(),
+        heat=str(payload.get("heat", "")).strip(),
+        summary=str(payload.get("summary", "")).strip(),
+        tags=tuple(str(tag).strip() for tag in payload.get("tags", []) if str(tag).strip()) if isinstance(payload.get("tags"), list) else (),
+    )
+
+
+def normalize_filter_values(value: object) -> list[str]:
+    raw = value if isinstance(value, str) else ",".join(str(item) for item in value) if isinstance(value, list) else ""
+    result: list[str] = []
+    for part in raw.replace("，", ",").split(","):
+        text = part.strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def parse_json_object(text: str) -> dict[str, object]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def create_publish_export(

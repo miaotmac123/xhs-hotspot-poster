@@ -150,6 +150,12 @@
       "type": "baidu_top",
       "url": "https://top.baidu.com/board?tab=realtime",
       "enabled": true
+    },
+    {
+      "name": "trendradar",
+      "type": "trendradar_json",
+      "path": "/absolute/path/to/TrendRadar/output/latest.json",
+      "enabled": false
     }
   ],
   "manual_topics": [
